@@ -10,6 +10,9 @@ import actionlib
 import geometry_msgs.msg
 from kxr_controller.msg import ServoOnOffAction
 from kxr_controller.msg import ServoOnOffResult
+from kxr_controller.msg import Stretch
+from kxr_controller.msg import StretchAction
+from kxr_controller.msg import StretchResult
 import numpy as np
 import rospy
 import sensor_msgs.msg
@@ -208,6 +211,24 @@ class RCB4ROSBridge(object):
             auto_start=False)
         self.servo_on_off_server.start()
 
+        # TODO(someone) support rcb-4 miniboard
+        if not rospy.get_param('~use_rcb4'):
+            self.stretch_server = actionlib.SimpleActionServer(
+                clean_namespace
+                + '/kxr_fullbody_controller/stretch_interface',
+                StretchAction,
+                execute_cb=self.stretch_callback,
+                auto_start=False)
+            self.stretch_server.start()
+            self.stretch_publisher = rospy.Publisher(
+                clean_namespace
+                + '/kxr_fullbody_controller/stretch',
+                Stretch,
+                queue_size=1,
+                latch=True)
+            rospy.sleep(0.1)
+            self.publish_stretch()
+
         self.proc_controller_spawner = subprocess.Popen(
             [f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun',
              'controller_manager', 'spawner']
@@ -361,6 +382,49 @@ class RCB4ROSBridge(object):
             self.unsubscribe()
             rospy.signal_shutdown('Disconnected {}.'.format(e))
         return self.servo_on_off_server.set_succeeded(ServoOnOffResult())
+
+    def publish_stretch(self):
+        # Get current stretch of all servo motors and publish them
+        joint_names = []
+        servo_ids = []
+        for joint_name in self.joint_names:
+            if joint_name not in self.joint_name_to_id:
+                continue
+            joint_names.append(joint_name)
+            servo_ids.append(self.joint_name_to_id[joint_name])
+        try:
+            stretch = self.interface.read_stretch(servo_ids=servo_ids)
+        except serial.serialutil.SerialException as e:
+            rospy.logerr('[read_stretch] {}'.format(str(e)))
+        stretch_msg = Stretch(
+            joint_names=joint_names,
+            stretch=stretch
+        )
+        self.stretch_publisher.publish(stretch_msg)
+
+    def stretch_callback(self, goal):
+        if len(goal.joint_names) == 0:
+            goal.joint_names = self.joint_names
+        joint_names = []
+        servo_ids = []
+        for joint_name in goal.joint_names:
+            if joint_name not in self.joint_name_to_id:
+                continue
+            joint_names.append(joint_name)
+            servo_ids.append(self.joint_name_to_id[joint_name])
+        # Send new stretch
+        stretch = goal.stretch
+        try:
+            self.interface.send_stretch(
+                value=stretch, servo_ids=servo_ids)
+        except serial.serialutil.SerialException as e:
+            rospy.logerr('[send_stretch] {}'.format(str(e)))
+        # Return result
+        self.publish_stretch()
+        rospy.loginfo(
+            "Update {} stretch to {}".format(
+                joint_names, stretch))
+        return self.stretch_server.set_succeeded(StretchResult())
 
     def publish_imu_message(self):
         msg = sensor_msgs.msg.Imu()

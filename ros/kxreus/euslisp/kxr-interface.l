@@ -60,7 +60,12 @@
                                            (format nil "/~A/servo_on_off" controller-name))
                                        kxr_controller::ServoOnOffAction
                                        :groupname groupname))
-   (dolist (action (list servo-on-off-client))
+   (setq stretch-client (instance ros::simple-action-client :init
+                                  (if namespace (format nil "/~A/~A/stretch_interface" namespace controller-name)
+                                    (format nil "/~A/stretch_interface" controller-name))
+                                  kxr_controller::StretchAction
+                                  :groupname groupname))
+   (dolist (action (list servo-on-off-client stretch-client))
      (unless (and joint-action-enable (send action :wait-for-server 3))
        (setq joint-action-enable nil)
        (ros::ros-warn "~A is not respond, kxr-interface is disabled" action)
@@ -104,7 +109,22 @@
      (setq goal (instance kxr_controller::ServoOnOffGoal :init))
      (send goal :joint_names names)
      (send goal :servo_on_states (make-array (length names) :initial-element nil))
-     (send servo-on-off-client :send-goal goal))))
+     (send servo-on-off-client :send-goal goal)))
+  (:send-stretch
+   (&key (value 127) (names nil))
+   (when (null names)
+     (setq names joint-names))
+   (let* (goal result)
+     (setq goal (instance kxr_controller::StretchGoal :init))
+     (send goal :joint_names names)
+     (send goal :stretch value)
+     (send stretch-client :send-goal goal)))
+  (:read-stretch
+   ()
+   (one-shot-subscribe
+    (if namespace (format nil "/~A/~A/stretch" namespace controller-name)
+      (format nil "/~A/stretch" controller-name))
+    kxr_controller::Stretch)))
 
 
 (defun kxr-init (&key
