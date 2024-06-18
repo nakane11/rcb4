@@ -17,7 +17,10 @@ ELFINFO = namedtuple('ELFINFO', ['url', 'md5sum'])
 elf_infos = {
     'v0.6.2': ELFINFO(
         'https://github.com/iory/rcb4/releases/download/v0.6.2.elf/v0.6.2.elf',  # NOQA
-        '9205b34ce4d81b87c4f11e6139f96b17')
+        '9205b34ce4d81b87c4f11e6139f96b17'),
+    'v0.6.2.pump': ELFINFO(
+        'https://github.com/nakane11/rcb4/releases/download/v0.6.2.pump/v0.6.2.pump.elf',  # NOQA
+        '0b5ee7f7300c622d76bba0b572415b2d')
 }
 
 
