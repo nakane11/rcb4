@@ -20,7 +20,10 @@ elf_infos = {
         '9205b34ce4d81b87c4f11e6139f96b17'),
     'v0.6.2.pump': ELFINFO(
         'https://github.com/nakane11/rcb4/releases/download/v0.6.2.pump/v0.6.2.pump.elf',  # NOQA
-        '0b5ee7f7300c622d76bba0b572415b2d')
+        '0b5ee7f7300c622d76bba0b572415b2d'),
+    'v0.6.3': ELFINFO(
+        'https://github.com/nakane11/rcb4/releases/download/v0.6.3/v0.6.3.elf',
+        'bdf7777c8cd3cb19398d8968b8714896'),
 }
 
 
@@ -28,7 +31,7 @@ def get_cache_dir():
     return os.environ.get('RCB4_CACHE_DIR', _default_cache_dir)
 
 
-def kondoh7_elf(version='v0.6.2'):
+def kondoh7_elf(version='v0.6.3'):
     if version not in elf_infos:
         raise RuntimeError(
             'Invalid armh7 version. Valid versions are {}'
