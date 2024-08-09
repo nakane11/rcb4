@@ -15,6 +15,7 @@ from kxr_controller.msg import ServoOnOffResult
 from kxr_controller.msg import Stretch
 from kxr_controller.msg import StretchAction
 from kxr_controller.msg import StretchResult
+from hand_v3.msg import RawAngle
 import numpy as np
 import rospy
 import sensor_msgs.msg
@@ -26,7 +27,7 @@ import std_msgs.msg
 import yaml
 
 from rcb4.armh7interface import ARMH7Interface
-from rcb4.rcb4interface import RCB4Interface
+from rcb4.rcb4interface import RCB4Interface, deg_to_servovector
 
 
 np.set_printoptions(precision=0, suppress=True)
@@ -183,7 +184,8 @@ class RCB4ROSBridge(object):
                     self.interface = RCB4Interface()
                     self.interface.auto_open()
                 else:
-                    self.interface = ARMH7Interface.from_port()
+                    # self.interface = ARMH7Interface.from_port()
+                    self.interface = ARMH7Interface()
                 break
             except serial.SerialException as e:
                 rospy.logerr('Waiting for the port to become available. {}'
@@ -195,13 +197,14 @@ class RCB4ROSBridge(object):
         self._prev_velocity_command = None
 
         # set servo ids to rosparam
-        rospy.set_param(clean_namespace + '/servo_ids',
-                        self.interface.search_servo_ids().tolist())
+        # rospy.set_param(clean_namespace + '/servo_ids',
+        #                 self.interface.search_servo_ids().tolist())
 
         wheel_servo_sorted_ids = []
         trim_vector_servo_ids = []
         trim_vector_offset = []
-        for _, info in servo_infos.items():
+        self.futaba_joint_names = []
+        for name, info in servo_infos.items():
             if isinstance(info, int):
                 continue
             servo_id = info['id']
@@ -209,22 +212,24 @@ class RCB4ROSBridge(object):
             offset = info.get('offset', 0)
             if 'type' in info and info['type'] == 'continuous':
                 wheel_servo_sorted_ids.append(servo_id)
-            idx = self.interface.servo_id_to_index(servo_id)
-            if idx is None:
-                continue
-            self.interface._joint_to_actuator_matrix[idx, idx] = \
-                direction * self.interface._joint_to_actuator_matrix[idx, idx]
-            trim_vector_servo_ids.append(servo_id)
-            trim_vector_offset.append(direction * offset)
-        if self.interface.__class__.__name__ != 'RCB4Interface':
-            self.interface.trim_vector(
-                trim_vector_offset, trim_vector_servo_ids)
-        if self.interface.wheel_servo_sorted_ids is None:
-            self.interface.wheel_servo_sorted_ids = wheel_servo_sorted_ids
+            if 'product' in info and info['product'] == 'futaba':
+                self.futaba_joint_names.append(name)
+        #     idx = self.interface.servo_id_to_index(servo_id)
+        #     if idx is None:
+        #         continue
+        #     self.interface._joint_to_actuator_matrix[idx, idx] = \
+        #         direction * self.interface._joint_to_actuator_matrix[idx, idx]
+        #     trim_vector_servo_ids.append(servo_id)
+        #     trim_vector_offset.append(direction * offset)
+        # if self.interface.__class__.__name__ != 'RCB4Interface':
+        #     self.interface.trim_vector(
+        #         trim_vector_offset, trim_vector_servo_ids)
+        # if self.interface.wheel_servo_sorted_ids is None:
+        #     self.interface.wheel_servo_sorted_ids = wheel_servo_sorted_ids
 
         self.set_fullbody_controller(clean_namespace)
         self.set_initial_positions(clean_namespace)
-        self.check_servo_states()
+        # self.check_servo_states()
 
         rospy.loginfo('run kxr_controller')
         self.proc_kxr_controller = run_kxr_controller(
@@ -235,10 +240,10 @@ class RCB4ROSBridge(object):
             JointState, queue_size=1,
             callback=self.command_joint_state_callback)
 
-        self.velocity_command_joint_state_sub = rospy.Subscriber(
-            clean_namespace + '/velocity_command_joint_state',
-            JointState, queue_size=1,
-            callback=self.velocity_command_joint_state_callback)
+        # self.velocity_command_joint_state_sub = rospy.Subscriber(
+        #     clean_namespace + '/velocity_command_joint_state',
+        #     JointState, queue_size=1,
+        #     callback=self.velocity_command_joint_state_callback)
 
         self.servo_on_off_server = actionlib.SimpleActionServer(
             clean_namespace
@@ -264,7 +269,7 @@ class RCB4ROSBridge(object):
                 queue_size=1,
                 latch=True)
             rospy.sleep(0.1)
-            self.publish_stretch()
+            # self.publish_stretch()
 
         self.proc_controller_spawner = subprocess.Popen(
             [f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun',
@@ -294,6 +299,8 @@ class RCB4ROSBridge(object):
                 clean_namespace + '/battery_voltage',
                 std_msgs.msg.Float32,
                 queue_size=1)
+        self.kondo_pub = rospy.Publisher("/kondo/command_angle", RawAngle, queue_size=1)
+        self.futaba_pub = rospy.Publisher("/futaba/command_angle", RawAngle, queue_size=1)
 
     def __del__(self):
         if self.proc_controller_spawner:
@@ -325,54 +332,75 @@ class RCB4ROSBridge(object):
             if jn not in self.joint_name_to_id:
                 continue
             servo_id = self.joint_name_to_id[jn]
-            if servo_id in self.interface.wheel_servo_sorted_ids:
-                continue
+            # if servo_id in self.interface.wheel_servo_sorted_ids:
+            #     continue
             self.fullbody_jointnames.append(jn)
         set_fullbody_controller(self.fullbody_jointnames)
 
     def set_initial_positions(self, clean_namespace):
         initial_positions = {}
-        init_av = self.interface.angle_vector()
-        for jn in self.joint_names:
-            if jn not in self.joint_name_to_id:
-                continue
-            servo_id = self.joint_name_to_id[jn]
-            if servo_id in self.interface.wheel_servo_sorted_ids:
-                continue
-            idx = self.interface.servo_id_to_index(servo_id)
-            if idx is None:
-                continue
-            initial_positions[jn] = float(
-                np.deg2rad(init_av[idx]))
+        init_av = [-60,-60,-60,60,-50,60,67,0,0,0]
+        joint_names = ['THUMB_JOINT0',
+                'THUMB_JOINT1',
+                'INDEX_JOINT',
+                'MIDDLE_JOINT',
+                'RING_JOINT',
+                'LITTLE_JOINT',
+                'ADDUCTION_JOINT',
+                'RARM_JOINT0',
+                'RARM_JOINT1',
+                'RARM_JOINT2']
+        for av, jn in zip(init_av, joint_names):
+            initial_positions[jn] = float(np.deg2rad(av))
+        # # init_av = self.interface.angle_vector()
+        # for jn in self.joint_names:
+        #     if jn not in self.joint_name_to_id:
+        #         continue        #     servo_id = self.joint_name_to_id[jn]
+        #     # if servo_id in self.interface.wheel_servo_sorted_ids:
+        #     #     continue
+        #     idx = self.interface.servo_id_to_index(servo_id)
+        #     if idx is None:
+        #         continue
+        #     initial_positions[jn] = float(
+        #         np.deg2rad(init_av[idx]))
         set_initial_position(initial_positions, namespace=clean_namespace)
 
     def _msg_to_angle_vector_and_servo_ids(
             self, msg,
             velocity_control=False):
         used_servo_id = {}
-        servo_ids = []
-        angle_vector = []
+        kondo_servo_ids = []
+        kondo_angle_vector = []
+        futaba_servo_ids = []
+        futaba_angle_vector = []
         for name, angle in zip(msg.name, msg.position):
-            if name not in self.joint_name_to_id or \
-               (name in self.joint_servo_on and not self.joint_servo_on[name]):
+            if name not in self.joint_name_to_id: # or \
+               # (name in self.joint_servo_on and not self.joint_servo_on[name]):
                 continue
             idx = self.joint_name_to_id[name]
-            if velocity_control:
-                if idx not in self.interface.wheel_servo_sorted_ids:
-                    continue
-            else:
-                if idx in self.interface.wheel_servo_sorted_ids:
-                    continue
+            if name in self.futaba_joint_names:
+                futaba_angle_vector.append(np.rad2deg(angle))
+                futaba_servo_ids.append(idx)
+                continue
+            # if velocity_control:
+            #     if idx not in self.interface.wheel_servo_sorted_ids:
+            #         continue
+            # else:
+            #     if idx in self.interface.wheel_servo_sorted_ids:
+            #         continue
             # should ignore duplicated index.
             if idx in used_servo_id:
                 continue
             used_servo_id[idx] = True
-            angle_vector.append(np.rad2deg(angle))
-            servo_ids.append(idx)
-        angle_vector = np.array(angle_vector)
-        servo_ids = np.array(servo_ids, dtype=np.int32)
-        valid_indices = self.interface.valid_servo_ids(servo_ids)
-        return angle_vector[valid_indices], servo_ids[valid_indices]
+            kondo_angle_vector.append(7500+deg_to_servovector*np.rad2deg(angle))
+            kondo_servo_ids.append(idx)
+        futaba_angle_vector = np.array(futaba_angle_vector, dtype=np.int32)
+        futaba_servo_ids = np.array(futaba_servo_ids, dtype=np.int32)
+        kondo_angle_vector = np.array(kondo_angle_vector, dtype=np.int32)
+        kondo_servo_ids = np.array(kondo_servo_ids, dtype=np.int32)
+        # valid_indices = self.interface.valid_servo_ids(kondo_servo_ids)
+        return kondo_angle_vector, kondo_servo_ids,\
+            futaba_angle_vector, futaba_servo_ids
 
     def velocity_command_joint_state_callback(self, msg):
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
@@ -389,14 +417,25 @@ class RCB4ROSBridge(object):
             rospy.logerr('[velocity_command_joint] {}'.format(str(e)))
 
     def command_joint_state_callback(self, msg):
-        av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
-            msg, velocity_control=False)
-        if len(av) == 0:
-            return
-        try:
-            self.interface.angle_vector(av, servo_ids, velocity=1)
-        except serial.serialutil.SerialException as e:
-            rospy.logerr('[command_joint] {}'.format(str(e)))
+        kondo_av, kondo_servo_ids, futaba_av, futaba_servo_ids\
+            = self._msg_to_angle_vector_and_servo_ids(
+                msg, velocity_control=False)
+        if len(kondo_av) != 0:
+            kondo_msg = RawAngle()
+            kondo_msg.angle = kondo_av
+            kondo_msg.id = list(kondo_servo_ids)
+            kondo_msg.length = len(kondo_av)
+            self.kondo_pub.publish(kondo_msg)
+            # try:
+            #     self.interface.angle_vector(kondo_av, kondo_servo_ids, velocity=1)
+            # except serial.serialutil.SerialException as e:
+            #     rospy.logerr('[command_joint] {}'.format(str(e)))
+        if len(futaba_av) != 0:
+            futaba_msg = RawAngle()
+            futaba_msg.angle = futaba_av
+            futaba_msg.id = list(futaba_servo_ids)
+            futaba_msg.length = len(futaba_av)
+            self.futaba_pub.publish(futaba_msg)
 
     def servo_on_off_callback(self, goal):
         servo_vector = []
@@ -545,13 +584,12 @@ class RCB4ROSBridge(object):
     def run(self):
         rate = rospy.Rate(rospy.get_param(
             self.clean_namespace + '/control_loop_rate', 20))
-
         while not rospy.is_shutdown():
-            if self.interface.is_opened() is False:
-                self.unsubscribe()
-                rospy.signal_shutdown('Disconnected.')
-                break
-            self.publish_joint_states()
+            # if self.interface.is_opened() is False:
+            #     self.unsubscribe()
+            #     rospy.signal_shutdown('Disconnected.')
+            #     break
+            # self.publish_joint_states()
 
             if self.publish_imu and self.imu_publisher.get_num_connections():
                 self.publish_imu_message()
