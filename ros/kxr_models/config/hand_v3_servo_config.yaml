@@ -1,0 +1,12 @@
+joint_name_to_servo_id: {
+  THUMB_JOINT0: {'id': 0, 'product': 'futaba'},
+  THUMB_JOINT1: {'id': 5, 'product': 'futaba'},  
+  INDEX_JOINT: {'id': 3, 'product': 'futaba'},
+  MIDDLE_JOINT: {'id': 4, 'product': 'futaba'},
+  RING_JOINT: {'id': 2, 'product': 'futaba'},
+  LITTLE_JOINT: {'id': 1, 'product': 'futaba'},
+  ADDUCTION_JOINT: {'id': 0, 'product': 'kondo'},
+  RARM_JOINT0: {'id': 1, 'product': 'kondo'},
+  RARM_JOINT1: {'id': 2, 'product': 'kondo'},
+  RARM_JOINT2: {'id': 3, 'product': 'kondo'}
+}
