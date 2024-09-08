@@ -1,3 +1,4 @@
+import numbers
 from pathlib import Path
 import platform
 import select
@@ -30,6 +31,7 @@ from rcb4.rcb4interface import RCB4Interface
 from rcb4.rcb4interface import ServoParams
 from rcb4.struct_header import c_vector
 from rcb4.struct_header import DataAddress
+from rcb4.struct_header import GPIOStruct
 from rcb4.struct_header import Madgwick
 from rcb4.struct_header import max_sensor_num
 from rcb4.struct_header import sensor_sidx
@@ -70,6 +72,10 @@ armh7_variable_list = [
     'Worm_vector',
     'SysB',
     'data_address',
+    'pump_switch',
+    'valve_switch',
+    'gpio_cmd',
+    'GPIO_vector',
 ]
 
 
@@ -458,6 +464,66 @@ class ARMH7Interface(object):
             ServoStruct, slot_name='error_angle')[servo_ids]
         return error_angles
 
+    def adjust_angle_vector(self, servo_ids=None, error_threshold=None):
+        """Stop servo motor when joint error become large.
+
+        This function stops servo motor when the error between reference angle
+        vector and current angle vector exceeds error threshold.
+
+        Parameters
+        ----------
+        servo_ids : array_like
+            Array of error check target servo IDs. Each ID corresponds to a
+            specific servo.
+        error_threshold : None or numbers.Number or numpy.ndarray
+            Error threshold angle [deg].
+
+        Returns
+        -------
+        bool
+            Return True when adjustment occurs.
+        """
+        if servo_ids is None:
+            servo_ids = self.search_servo_ids()
+        # Ignore free servo
+        servo_ids = servo_ids[
+            self.reference_angle_vector(servo_ids=servo_ids) != 32768]
+        if len(servo_ids) == 0:
+            return
+
+        # Calculate error threshold[deg]
+        if error_threshold is None:
+            error_threshold = 5
+        if isinstance(error_threshold, numbers.Number):
+            error_threshold = np.full(
+                len(servo_ids), error_threshold, dtype=np.float32)
+        assert isinstance(error_threshold, np.ndarray), \
+            'error_threshold must be np.ndarray'
+        assert len(servo_ids) == len(error_threshold), \
+            'length of servo_ids and error_threshold must be equal'
+
+        # Find servo whose angle exceeds error threshold
+        current_av = self.angle_vector(servo_ids=servo_ids)
+        reference_servo_av = self.reference_angle_vector(servo_ids=servo_ids)
+        reference_av = self.servo_angle_vector_to_angle_vector(
+            reference_servo_av, servo_ids)
+        error_av = current_av - reference_av
+        error_indices = abs(error_av) > error_threshold
+        error_ids = servo_ids[error_indices]
+
+        # Stop motion
+        if len(error_ids) > 0:
+            print(f'Servo {error_ids} error {error_av[error_indices]}[deg]'
+                  f' exceeds threshold {error_threshold[error_indices]}[deg].')
+            print('Stop motion by overriding reference angle vector with'
+                  'current angle vector.')
+            all_servo_ids = self.search_servo_ids()
+            self.servo_angle_vector(
+                all_servo_ids,
+                servo_vector=self._angle_vector()[all_servo_ids])
+            return True
+        return False
+
     def servo_id_to_index(self, servo_id):
         if self.valid_servo_ids([servo_id]):
             return self.sequentialized_servo_ids([servo_id])[0]
@@ -503,8 +569,8 @@ class ARMH7Interface(object):
         all_servo_ids = self.search_servo_ids()
         if len(all_servo_ids) == 0:
             return np.empty(shape=0)
-        av = np.append(self._angle_vector()[all_servo_ids], 1)
-        av = np.matmul(av.T, self.actuator_to_joint_matrix.T)[:-1]
+        av = self.servo_angle_vector_to_angle_vector(
+            self._angle_vector()[all_servo_ids], all_servo_ids)
         worm_av = self.read_cstruct_slot_vector(
             WormmoduleStruct, slot_name='present_angle')
         for worm_idx in self.search_worm_ids():
@@ -515,6 +581,21 @@ class ARMH7Interface(object):
                 return np.empty(shape=0)
             av = av[self.sequentialized_servo_ids(servo_ids)]
         return av
+
+    def servo_angle_vector_to_angle_vector(self, servo_av, servo_ids=None):
+        if servo_ids is None:
+            servo_ids = self.search_servo_ids()
+        if len(servo_av) != len(servo_ids):
+            raise ValueError(
+                'Length of servo_ids and angle_vector must be the same.')
+        if len(servo_ids) == 0:
+            return np.empty(shape=0)
+        seq_indices = self.sequentialized_servo_ids(servo_ids)
+        tmp_servo_av = np.append(np.zeros(len(self.servo_sorted_ids)), 1)
+        tmp_servo_av[seq_indices] = np.array(servo_av)
+        tmp_av = np.matmul(
+            tmp_servo_av.T, self.actuator_to_joint_matrix.T)[:-1]
+        return tmp_av[seq_indices]
 
     def angle_vector_to_servo_angle_vector(self, av, servo_ids=None):
         if servo_ids is None:
@@ -616,6 +697,16 @@ class ARMH7Interface(object):
                 np.arange(len(servo_indices))
         self.joint_to_actuator_matrix
         return servo_indices
+
+    def search_air_board_ids(self):
+        # air_boards and air_board_ids are in the same order
+        air_boards = self.all_air_boards()
+        air_board_ids = []
+        for air_board in air_boards:
+            for idx in self.id_vector:
+                if air_board.id == idx // 2:
+                    air_board_ids.append(idx)
+        return np.array(air_board_ids)
 
     def valid_servo_ids(self, servo_ids):
         return np.isfinite(self._servo_id_to_sequentialized_servo_id[
@@ -1108,11 +1199,116 @@ class ARMH7Interface(object):
         return self.memory_cstruct(
             SensorbaseStruct, idx - sensor_sidx)
 
+    def read_gpio_cstruct(self, idx):
+        return self.memory_cstruct(
+            GPIOStruct, idx - sensor_sidx)
+
     def all_jointbase_sensors(self):
         if self.id_vector is None:
             self.read_jointbase_sensor_ids()
         return [self.read_jb_cstruct(idx)
                 for idx in self.id_vector]
+
+    def all_air_boards(self):
+        jointbase_sensors = self.all_jointbase_sensors()
+        return [j for j in jointbase_sensors
+                if j.board_revision == 3]
+
+    def read_pressure_sensor(self, board_idx):
+        """Returns pressure sensor value of air_relay board.
+
+        Equation for calculating pressure value is following
+        - v_diff[V]:
+            (3.1395 * pressure[kPa] + 10.739) / 1000
+            output of wheatstone bridge in pressure sensor
+            when sensor input voltage is 5V, so need to convert for 4.14V.
+            4.14V is determined by constant current circuit.
+            -> See https://api.puiaudio.com/file/2ee7baab-a644-43d5-
+               96e0-0b83ff2e8e64.pdf, p.3
+        - v_amplified[V]:
+            v_diff[V] * GAIN + V_OFFSET[V]
+        - adc_raw:
+            v_amplified[V] / 3.3[V] * 4095 (12bit)
+        """
+        V_OFFSET = 1.65
+        GAIN = 7.4
+
+        all_sensor_data = self.read_jb_cstruct(board_idx)
+        adc_raw = all_sensor_data.adc[3]
+
+        v_amplified = 3.3 * adc_raw / 4095
+        v_diff = (v_amplified - V_OFFSET) / GAIN
+        pressure = (v_diff * 1000 * 5.0 / 4.14 - 10.739) / 3.1395
+        return pressure
+
+    def start_pump(self):
+        """Drive pump. There is supposed to be one pump for the entire system.
+
+        """
+        self.cfunc_call("pump_switch", True)
+
+    def stop_pump(self):
+        """Stop driving pump. There should be one pump for the entire system.
+
+        """
+        self.cfunc_call("pump_switch", False)
+
+    def open_air_connect_valve(self):
+        """Open valve to release air to atmosphere
+
+        """
+        self.cfunc_call("valve_switch", True)
+
+    def close_air_connect_valve(self):
+        """Close valve to shut off air from atmosphere
+
+        """
+        self.cfunc_call("valve_switch", False)
+
+    def gpio_mode(self, board_idx):
+        """Return current GPIO mode of air relay board
+
+        0b: 1 0 0 1 GPIO3 GPIO2 GPIO1 GPIO0
+        """
+        all_gpio_data = self.read_gpio_cstruct(board_idx)
+        gpio_mode = all_gpio_data.mode
+        return gpio_mode
+
+    def open_work_valve(self, board_idx):
+        """Open work valve
+
+        Set GPIO0 to 1
+        """
+        gpio_mode = self.gpio_mode(board_idx)
+        command = gpio_mode | 0b00000001
+        self.cfunc_call('gpio_cmd', board_idx, command)
+
+    def close_work_valve(self, board_idx):
+        """Close work valve
+
+        Set GPIO0 to 0
+        """
+        gpio_mode = self.gpio_mode(board_idx)
+        command = gpio_mode & 0b11111110
+        self.cfunc_call('gpio_cmd', board_idx, command)
+
+    def open_relay_valve(self, board_idx):
+        """Open valve to relay air to next work
+
+        Set GPIO1 to 1
+        """
+        gpio_mode = self.gpio_mode(board_idx)
+        command = gpio_mode | 0b00000010
+        self.cfunc_call('gpio_cmd', board_idx, command)
+
+    def close_relay_valve(self, board_idx):
+        """Close valve to relay air to next work
+
+        Set GPIO1 to 0
+        """
+        gpio_mode = self.gpio_mode(board_idx)
+        command = gpio_mode & 0b11111101
+        self.cfunc_call('gpio_cmd', board_idx, command)
 
     @property
     def servo_id_to_worm_id(self):
