@@ -105,8 +105,8 @@ class ESP32Interface(object):
         # self._default_timeout = timeout
         rospy.init_node("esp32interface")
 
-    # def __del__(self):
-    #     self.close()
+    def __del__(self):
+        self.close()
 
     #TODO 1.set timeout 2.use usb serial
     def open(self, port='tcp', tcp_portnum="11411"):
@@ -175,10 +175,11 @@ class ESP32Interface(object):
     #         if port.vid == vendor_id and port.pid == product_id:
     #             return self.open(port=port.device)
 
-    # def close(self):
-    #     if self.serial:
-    #         self.serial.close()
-    #     self.serial = None
+    def close(self):
+        if self.serial:
+            self.serial.terminate()
+            self.serial.wait()
+        self.serial = None
 
     # def is_opened(self):
     #     return self.serial is not None
