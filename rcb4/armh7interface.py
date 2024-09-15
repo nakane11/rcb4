@@ -2,6 +2,7 @@ import numbers
 from pathlib import Path
 import platform
 import select
+import socket
 import struct
 from threading import Lock
 import time
@@ -121,6 +122,33 @@ def padding_bytearray(ba, n):
         return ba
 
 
+class SerialSocket(socket.socket):
+    def write(self, data):
+        try:
+            self.send(data)
+        except socket.error as e:
+            raise serial.SerialException(f"Socket error: {e}")
+
+    def read(self, data_len):
+        return self.recv(data_len)
+
+    def accept(self):
+        sock, address = super().accept()
+        serial_sock = SerialSocket(sock.family, sock.type, sock.proto)
+        return serial_sock, address
+
+    @property
+    def in_waiting(self):
+        try:  # the caller checks just for <1, so we'll peek at just one byte
+            chunk = self.recv(1, socket.MSG_DONTWAIT | socket.MSG_PEEK)
+            if chunk == b'':
+                raise RuntimeError(
+                    "RosSerialServer.inWaiting() socket connection broken")
+            return len(chunk)
+        except BlockingIOError:
+            return 0
+
+
 class ARMH7Interface(object):
 
     def __init__(self, timeout=0.1):
@@ -140,7 +168,8 @@ class ARMH7Interface(object):
     def __del__(self):
         self.close()
 
-    def open(self, port='/dev/ttyUSB1', baudrate=1000000, timeout=0.01):
+    def open(self, port='/dev/ttyUSB1', baudrate=1000000, timeout=0.01,
+             tcp_portnum=11411):
         """Opens a serial connection to the ARMH7 device.
 
         Parameters
@@ -161,19 +190,36 @@ class ARMH7Interface(object):
         serial.SerialException
             If there is an error opening the serial port.
         """
-        # Reset the USB device before opening the serial port
-        try:
-            reset_serial_port(port)
-            # Wait for 2 seconds to ensure the device is properly reset
-            time.sleep(2.0)
-        except ValueError as e:
-            print(f"Skipping reset for non-USB serial port: {e}")
-        try:
-            self.serial = serial.Serial(port, baudrate, timeout=timeout)
-            print(f"Opened {port} at {baudrate} baud")
-        except serial.SerialException as e:
-            print(f"Error opening serial port: {e}")
-            raise serial.SerialException(e)
+        if port == 'tcp':
+            serversocket = SerialSocket(socket.AF_INET, socket.SOCK_STREAM)
+            serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            serversocket.bind(("", tcp_portnum))
+            serversocket.listen(1)
+            serversocket.settimeout(timeout)
+            try:
+                print("Waiting for socket connection")
+                clientsocket, address = serversocket.accept()
+                print("Established a socket connection from %s on port %s"
+                      % address)
+                self.serial = clientsocket
+            except socket.timeout:
+                print("Error establishing a socket connection")
+                raise
+
+        else:
+            # Reset the USB device before opening the serial port
+            try:
+                reset_serial_port(port)
+                # Wait for 2 seconds to ensure the device is properly reset
+                time.sleep(2.0)
+            except ValueError as e:
+                print(f"Skipping reset for non-USB serial port: {e}")
+            try:
+                self.serial = serial.Serial(port, baudrate, timeout=timeout)
+                print(f"Opened {port} at {baudrate} baud")
+            except serial.SerialException as e:
+                print(f"Error opening serial port: {e}")
+                raise serial.SerialException(e)
         ack = self.check_ack()
         if ack is not True:
             return False
@@ -194,6 +240,10 @@ class ARMH7Interface(object):
     def from_port(port=None):
         ports = serial.tools.list_ports.comports()
         if port is not None:
+            if port == 'tcp':
+                interface = ARMH7Interface()
+                interface.open(port, timeout=20)
+                return interface
             for cand in ports:
                 if cand.device == port:
                     if cand.vid == 0x165C and cand.pid == 0x0008:
