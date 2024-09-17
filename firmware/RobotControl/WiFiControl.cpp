@@ -49,8 +49,8 @@ void WiFiControl::begin() {
     }
   }
   xTaskCreatePinnedToCore([](void *args) {
-                            static_cast<WiFiControl*>(args)->execute(args);
-                          }, "Core0a", 4096, this, 3, &thp_[0], 0);
+                            static_cast<WiFiControl*>(args)->rcb4Task(args);
+                          }, "rcb4Task", 4096, this, 3, &thp_[0], 0);
 }
 
 void WiFiControl::connect() {
@@ -67,7 +67,7 @@ void WiFiControl::setPrintFunc(void (*printFunc)(String)) {
   printFunc_ = printFunc;
 }
 
-void WiFiControl::execute(void *args) {
+void WiFiControl::rcb4Task(void *args) {
   while (true) {
     M5.Lcd.clear();
     M5.Lcd.setCursor(0, 0);
@@ -75,20 +75,18 @@ void WiFiControl::execute(void *args) {
     if(rx_size>0){
       rx_buff[0] = rx_size;
       size_t bytesRead = read(&rx_buff[1], rx_size-1);
-      if(rx_buff[bytesRead] == rcb4_checksum(rx_buff, bytesRead)) {
-          for(int i=1;i<bytesRead;i++){
-            uint8_t data = rx_buff[i];
-            print(String(data));
-          }
+      if(rx_buff[bytesRead] != rcb4_checksum(rx_buff, bytesRead)) {
+        continue;
       }
+      /// debug
+      // for(int i=1;i<bytesRead;i++){
+      //   uint8_t data = rx_buff[i];
+      //   print(String(data));
+      // }
+      ///
+      executeCmd(rx_buff, bytesRead);
+      write(tx_buff,tx_size);
     }
-    uint8_t len = 2;
-    uint8_t tx_size = len + 2;
-    tx_buff[0] = tx_size;
-    tx_buff[tx_size-1] = rcb4_checksum(tx_buff, tx_size-1);
-    tx_buff[1] = 1;
-    tx_buff[2] = 2;
-    write(tx_buff,tx_size);
     delay(1000);
   }
 }
@@ -99,12 +97,12 @@ int WiFiControl::read() {
   return client_.read();
 }
 
-int WiFiControl::read(uint8_t* buffer, uint8_t length) {
+int WiFiControl::read(uint8_t* buffer, size_t length) {
   connect();
   return client_.read(buffer, length);
 }
 
-void WiFiControl::write(uint8_t *data, int length) {
+void WiFiControl::write(uint8_t *data, size_t length) {
   for (int i = 0; i < length; i++) {
       connect();
       client_.write(data[i]);
@@ -117,10 +115,29 @@ void WiFiControl::print(String message) {
   }
 }
 
- uint8_t WiFiControl::rcb4_checksum(uint8_t* byte_list, size_t len) {
+uint8_t WiFiControl::rcb4_checksum(uint8_t* byte_list, size_t len) {
     uint32_t checksum = 0;
     for (size_t i = 0; i < len; ++i) {
         checksum += (byte_list[i] & 0xFF);  // Mask each byte with 0xFF
     }
     return checksum & 0xFF;  // Mask the final result with 0xFF
+}
+
+void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
+  uint8_t command = rx_buffer[1];
+  tx_size = 4;
+  tx_buff[0] = tx_size;
+  tx_buff[1] = command;
+  tx_buff[2] = 0x06;
+  tx_buff[tx_size-1] = rcb4_checksum(tx_buff, tx_size-1);
+
+  switch (command) {
+  case ACK_OP: {
+    break;
+  } default: break;
+  }
+  for(int i=0;i<tx_size;i++){
+    uint8_t data = tx_buff[i];
+    print(String(data));
+  }
 }

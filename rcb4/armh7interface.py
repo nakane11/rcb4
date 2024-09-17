@@ -177,9 +177,7 @@ class ARMH7Interface(object):
                 # sample begin
                 i = 0
                 while True:
-                    i += 1
-                    checksum = rcb4_checksum([5, i, i*2, i*3])
-                    print(self.socket_write([5, i, i*2, i*3, checksum]))
+                    print(self.check_ack())
                 # sample end
             except socket.timeout:
                 print("Error establishing a socket connection")
@@ -353,15 +351,15 @@ class ARMH7Interface(object):
 
     def comm_write(self, byte_list):
         if self.serial.__class__.__name__ == 'Serial':
-            self.serial_write(byte_list)
+            return self.serial_write(byte_list)
         elif self.serial.__class__.__name__ == 'socket':
-            self.socket_write(byte_list)
+            return self.socket_write(byte_list)
 
     def comm_read(self, timeout=None):
         if self.serial.__class__.__name__ == 'Serial':
-            self.serial_read(timeout)
+            return self.serial_read(timeout)
         elif self.serial.__class__.__name__ == 'socket':
-            self.socket_read(timeout)
+            return self.socket_read(timeout)
 
     def get_version(self):
         byte_list = [0x03, CommandTypes.Version.value, 0x00]
