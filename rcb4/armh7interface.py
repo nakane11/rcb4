@@ -122,33 +122,6 @@ def padding_bytearray(ba, n):
         return ba
 
 
-class SerialSocket(socket.socket):
-    def write(self, data):
-        try:
-            self.send(data)
-        except socket.error as e:
-            raise serial.SerialException(f"Socket error: {e}")
-
-    def read(self, data_len):
-        return self.recv(data_len)
-
-    def accept(self):
-        sock, address = super().accept()
-        serial_sock = SerialSocket(sock.family, sock.type, sock.proto)
-        return serial_sock, address
-
-    @property
-    def in_waiting(self):
-        try:  # the caller checks just for <1, so we'll peek at just one byte
-            chunk = self.recv(1, socket.MSG_DONTWAIT | socket.MSG_PEEK)
-            if chunk == b'':
-                raise RuntimeError(
-                    "RosSerialServer.inWaiting() socket connection broken")
-            return len(chunk)
-        except BlockingIOError:
-            return 0
-
-
 class ARMH7Interface(object):
 
     def __init__(self, timeout=0.1):
@@ -191,19 +164,26 @@ class ARMH7Interface(object):
             If there is an error opening the serial port.
         """
         if port == 'tcp':
-            serversocket = SerialSocket(socket.AF_INET, socket.SOCK_STREAM)
-            serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             serversocket.bind(("", tcp_portnum))
             serversocket.listen(1)
-            serversocket.settimeout(timeout)
+            # serversocket.settimeout(timeout)
             try:
                 print("Waiting for socket connection")
                 clientsocket, address = serversocket.accept()
                 print("Established a socket connection from %s on port %s"
                       % address)
                 self.serial = clientsocket
+                # sample begin
+                i = 0
+                while True:
+                    i += 1
+                    checksum = rcb4_checksum([5, i, i*2, i*3])
+                    print(self.socket_write([5, i, i*2, i*3, checksum]))
+                # sample end
             except socket.timeout:
                 print("Error establishing a socket connection")
+                serversocket.close()
                 raise
 
         else:
@@ -324,13 +304,72 @@ class ARMH7Interface(object):
             if len(read_data) > 0 and read_data[0] == len(read_data):
                 return read_data[1:len(read_data) - 1]
 
+    def socket_write(self, byte_list):
+        if self.serial is None:
+            raise RuntimeError('Socket is not opened.')
+
+        data_to_send = bytes(byte_list)
+        with self.lock:
+            try:
+                self.serial.send(data_to_send)
+            except socket.error as e:
+                print(f"Error sending data: {e}")
+            ret = self.socket_read()
+        return ret
+
+    def socket_read(self, timeout=None):
+        if self.serial is None:
+            raise RuntimeError('Socket is not opened.')
+        if timeout is None:
+            timeout = 3
+
+        start_time = time.time()
+        read_data = b''
+        while True:
+            remain_time = timeout - (time.time() - start_time)
+            if remain_time <= 0:
+                raise serial.SerialException("Timeout: No data received.")
+            ready, _, _ = select.select(
+                [self.serial], [], [], remain_time)
+            if not ready:
+                continue
+            chunk = self.serial.recv(self.socket_in_waiting() or 1)
+            if not chunk:
+                raise serial.SerialException(
+                    "Timeout: Incomplete data received.")
+            read_data += chunk
+            if len(read_data) > 0 and read_data[0] == len(read_data):
+                return read_data[1:len(read_data) - 1]
+
+    def socket_in_waiting(self):
+        try:  # the caller checks just for <1, so we'll peek at just one byte
+            chunk = self.serial.recv(1, socket.MSG_DONTWAIT | socket.MSG_PEEK)
+            if chunk == b'':
+                raise RuntimeError(
+                    "RosSerialServer.inWaiting() socket connection broken")
+            return len(chunk)
+        except BlockingIOError:
+            return 0
+
+    def comm_write(self, byte_list):
+        if self.serial.__class__.__name__ == 'Serial':
+            self.serial_write(byte_list)
+        elif self.serial.__class__.__name__ == 'socket':
+            self.socket_write(byte_list)
+
+    def comm_read(self, timeout=None):
+        if self.serial.__class__.__name__ == 'Serial':
+            self.serial_read(timeout)
+        elif self.serial.__class__.__name__ == 'socket':
+            self.socket_read(timeout)
+
     def get_version(self):
         byte_list = [0x03, CommandTypes.Version.value, 0x00]
-        return self.serial_write(byte_list).decode('utf-8')
+        return self.comm_write(byte_list).decode('utf-8')
 
     def get_ack(self):
         byte_list = [0x04, CommandTypes.AckCheck.value, 0x06, 0x08]
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def check_ack(self):
         ack_byte_list = self.get_ack()
@@ -374,7 +413,7 @@ class ARMH7Interface(object):
         byte_list[8] = skip_size & 0xFF
         byte_list[9] = (skip_size >> 8) & 0xFF
         byte_list[10] = rcb4_checksum(byte_list)
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def memory_read(self, addr, length):
         limit = 250
@@ -412,7 +451,7 @@ class ARMH7Interface(object):
         for i in range(length):
             byte_list[10 + i] = data[i]
         byte_list[10 + length] = rcb4_checksum(byte_list[0:n-1])
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def cfunc_call(self, func_string, *args):
         addr = self.armh7_address[func_string]
@@ -427,7 +466,7 @@ class ARMH7Interface(object):
             byte_list[7 + i * 4:7 + (i + 1) * 4] = int(args[i]).to_bytes(
                 4, byteorder='little')
         byte_list[n - 1] = rcb4_checksum(byte_list[0:n-1])
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def write_cls_alist(self, cls, idx, slot_name, vec):
         baseaddr = self.armh7_address[cls.__name__]
@@ -480,7 +519,7 @@ class ARMH7Interface(object):
         byte_list[7] = element_size
         byte_list[8] = cls_size
         byte_list[n - 1] = rcb4_checksum(byte_list)
-        b = self.serial_write(byte_list)
+        b = self.comm_write(byte_list)
         return np.frombuffer(b, dtype=c_type_to_numpy_format(c_type))
 
     def read_jointbase_sensor_ids(self):
@@ -849,7 +888,7 @@ class ARMH7Interface(object):
         byte_list.append(rcb4_checksum(byte_list))
 
         # send the command
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def servo_param64(self, sid, param_names=None):
         v = self.memory_cstruct(ServoStruct, sid)
@@ -922,7 +961,7 @@ class ARMH7Interface(object):
             + rcb4_servo_svector(servo_ids, value)
         byte_list.insert(0, 2 + len(byte_list))
         byte_list.append(rcb4_checksum(byte_list))
-        return self.serial_write(byte_list)
+        return self.comm_write(byte_list)
 
     def read_quaternion(self):
         cs = self.memory_cstruct(Madgwick, 0)
@@ -1241,7 +1280,7 @@ class ARMH7Interface(object):
                                          10 + i * tsize + j * esize, v)
 
         byte_list[n - 1] = rcb4_checksum(byte_list)
-        s = self.serial_write(byte_list)
+        s = self.comm_write(byte_list)
         s = padding_bytearray(s, tsize)
         return np.frombuffer(s, dtype=c_type_to_numpy_format(c_type))
 
