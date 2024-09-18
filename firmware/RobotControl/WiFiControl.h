@@ -8,8 +8,11 @@
 // #define WIFI_AP 0
 #define WIFI_STA 1
 // #define WIFI_DUAL 2
+
 #define ACK_OP 0xFE
 #define SEARCH_ID_OP 0x20
+#define M_S_CV_OP 0x10
+
 #define BUFF_SIZE 128
 
 class WiFiControl
@@ -52,6 +55,7 @@ private:
   uint8_t rcb4_checksum(uint8_t* byte_list, size_t len);
   void executeCmd(uint8_t* rx_buffer, size_t length);
   void searchServoId();
+  void servoCmd(uint8_t command, uint8_t* servo_info);
 };
 
 #endif

@@ -38,18 +38,28 @@ void WiFiControl::begin() {
     while( WiFi.status() != WL_CONNECTED) {
       delay(10);  
     }
-    print("Connecting to server");
-    print("IP: " + serverIP_.toString());
-    print("port: " + String(port_));
-    client_.connect(serverIP_, port_);
-    if (isConnected()) {
-      print("Succeed");
-    } else {
-      print("Failed to connect to server");
+    M5.Lcd.fillScreen(GREEN);
+    delay(1000);
+
+    while (1) {
+      M5.Lcd.setCursor(0, 0);
+      print("Connecting to server");
+      print("IP: " + serverIP_.toString());
+      print("port: " + String(port_));
+      client_.connect(serverIP_, port_);
+      if (isConnected()) {
+        M5.Lcd.fillScreen(BLUE);
+        print("Succeed");
+        break;
+      } else {
+        print("Failed to connect to server");
+        M5.Lcd.fillScreen(RED);
+        delay(500);
+      }
     }
   }
-    M5.Lcd.clear();
-    M5.Lcd.setCursor(0, 0);  
+  M5.Lcd.clear();
+  M5.Lcd.setCursor(0, 0);
   xTaskCreatePinnedToCore([](void *args) {
                             static_cast<WiFiControl*>(args)->rcb4Task(args);
                           }, "rcb4Task", 4096, this, 3, &thp_[0], 0);
@@ -57,6 +67,7 @@ void WiFiControl::begin() {
 
 void WiFiControl::connect() {
   if (!isConnected()) {
+    M5.Lcd.println("try to connect");
     client_.connect(serverIP_, port_);
   }
 }
@@ -109,10 +120,14 @@ int WiFiControl::read(uint8_t* buffer, size_t length) {
 }
 
 void WiFiControl::write(uint8_t *data, size_t length) {
+  connect();
+  M5.Lcd.println("writing ");
   for (int i = 0; i < length; i++) {
-      connect();
-      client_.write(data[i]);
+    M5.Lcd.print(data[i]);
+    M5.Lcd.print(' ');
+    client_.write(data[i]);
   }
+  M5.Lcd.println("writing end");
 }
 
 void WiFiControl::print(String message) {
@@ -134,29 +149,35 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
   tx_size = 4;
   tx_buff[2] = 0x06;
 
+  for(int i=0;i<length;i++){
+    M5.Lcd.print(rx_buffer[i]);
+    M5.Lcd.print(' ');
+  }
+  M5.Lcd.println("");
   switch (command) {
   case ACK_OP: {
     break;
-  } case SEARCH_ID_OP: {
-      searchServoId();
-      tx_size = 3 + id_count;
-      for(int i=0;i<id_count;i++) {
-        tx_buff[i+2] = ids[i];
-      }
-      break;
-  }default: break;
+  }
+  case SEARCH_ID_OP: {
+    searchServoId();
+    tx_size = 3 + id_count;
+    for(int i=0;i<id_count;i++) {
+      tx_buff[i+2] = ids[i];
+    }
+    break;
+  }
+  // case M_S_CV_OP: {
+  //   servoCmd(command, &rx_buffer[2]);
+  // }
+  default: break;
   }
   tx_buff[0] = tx_size;
   tx_buff[1] = command;
   tx_buff[tx_size-1] = rcb4_checksum(tx_buff, tx_size-1);
 
-  for(int i=0;i<tx_size;i++){
-    uint8_t data = tx_buff[i];
-    print(String(data));
-  }
 }
 
-void WiFiControl::searchServoId(){
+void WiFiControl::searchServoId() {
   id_count = 0;
   for (int i = 0; i < 18; ++i) {
     int pos = krs_.getPos(i);
@@ -164,5 +185,24 @@ void WiFiControl::searchServoId(){
       ids[id_count] = i;
       id_count++;
     }
+  }
+}
+
+void WiFiControl::servoCmd(uint8_t command, uint8_t* servo_info) {
+  uint16_t ang;
+  int j = 0;
+  switch (command) {
+  case M_S_CV_OP: {
+    for (int i=0; i<18; i++) {
+      uint8_t idx = i*2;
+      if ((servo_info[idx>>3] >> (idx%8)) & 0x1) {
+        ang = *(uint16_t *)&servo_info[7+3*j];
+        print(String(idx));
+        print(String(ang));
+        // krs_.setPos(idx, ang);
+        j++;
+      }
+    }
+  }
   }
 }

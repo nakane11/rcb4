@@ -211,10 +211,10 @@ class RCB4ROSBridge(object):
         # set servo ids to rosparam
         rospy.set_param(clean_namespace + '/servo_ids',
                         self.interface.search_servo_ids().tolist())
-        if not rospy.get_param('~use_rcb4'):
-            # set air board ids to rosparam
-            rospy.set_param(clean_namespace + '/air_board_ids',
-                            self.interface.search_air_board_ids().tolist())
+        # if not rospy.get_param('~use_rcb4'):
+        #     # set air board ids to rosparam
+        #     rospy.set_param(clean_namespace + '/air_board_ids',
+        #                     self.interface.search_air_board_ids().tolist())
 
         wheel_servo_sorted_ids = []
         trim_vector_servo_ids = []
@@ -269,7 +269,8 @@ class RCB4ROSBridge(object):
         self.servo_on_off_server.start()
 
         # TODO(someone) support rcb-4 miniboard
-        if not rospy.get_param('~use_rcb4'):
+        if False:
+        # if not rospy.get_param('~use_rcb4'):
             # Stretch
             self.stretch_server = actionlib.SimpleActionServer(
                 clean_namespace
@@ -371,15 +372,16 @@ class RCB4ROSBridge(object):
 
     def check_servo_states(self):
         self.joint_servo_on = {jn: False for jn in self.joint_names}
-        servo_on_states = self.interface.servo_states()
+        # servo_on_states = self.interface.servo_states()
         for jn in self.joint_names:
             if jn not in self.joint_name_to_id:
                 continue
             idx = self.joint_name_to_id[jn]
-            if idx in servo_on_states:
-                self.joint_servo_on[jn] = True
-            else:
-                self.joint_servo_on[jn] = False
+            self.joint_servo_on[jn] = False
+            # if idx in servo_on_states:
+            #     self.joint_servo_on[jn] = True
+            # else:
+            #     self.joint_servo_on[jn] = False
 
     def set_fullbody_controller(self, clean_namespace):
         self.fullbody_jointnames = []
@@ -722,7 +724,7 @@ class RCB4ROSBridge(object):
     def publish_joint_states(self):
         try:
             av = self.interface.angle_vector()
-            torque_vector = self.interface.servo_error()
+            # torque_vector = self.interface.servo_error()
         except IndexError as e:
             rospy.logerr('[publish_joint_states] {}'.format(str(e)))
             return
@@ -738,7 +740,7 @@ class RCB4ROSBridge(object):
                 if idx is None:
                     continue
                 msg.position.append(np.deg2rad(av[idx]))
-                msg.effort.append(torque_vector[idx])
+                # msg.effort.append(torque_vector[idx])
                 msg.name.append(name)
         self.current_joint_states_pub.publish(msg)
 
@@ -757,16 +759,18 @@ class RCB4ROSBridge(object):
                 break
             self.publish_joint_states()
             self.publish_servo_on_off()
+            self.interface.servo_sorted_ids = None
+            self.interface.search_servo_ids()
 
-            if self.publish_imu and self.imu_publisher.get_num_connections():
-                self.publish_imu_message()
-            if self.publish_sensor:
-                self.publish_sensor_values()
-            if self.publish_battery_voltage:
-                self.publish_battery_voltage_value()
-            if rospy.get_param('~use_rcb4') is False and self.control_pressure:
-                self.publish_pressure()
-                self.publish_pressure_control()
+            # if self.publish_imu and self.imu_publisher.get_num_connections():
+            #     self.publish_imu_message()
+            # if self.publish_sensor:
+            #     self.publish_sensor_values()
+            # if self.publish_battery_voltage:
+            #     self.publish_battery_voltage_value()
+            # if rospy.get_param('~use_rcb4') is False and self.control_pressure:
+            #     self.publish_pressure()
+            #     self.publish_pressure_control()
             rate.sleep()
 
 

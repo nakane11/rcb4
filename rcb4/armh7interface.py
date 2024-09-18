@@ -127,6 +127,7 @@ class ARMH7Interface(object):
     def __init__(self, timeout=0.1):
         self.lock = Lock()
         self.serial = None
+        self.serversocket = None
         self.id_vector = None
         self.servo_sorted_ids = None
         self.worm_sorted_ids = None
@@ -165,19 +166,17 @@ class ARMH7Interface(object):
         """
         if port == 'tcp':
             serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             serversocket.bind(("", tcp_portnum))
             serversocket.listen(1)
-            # serversocket.settimeout(timeout)
+            serversocket.settimeout(timeout)
             try:
                 print("Waiting for socket connection")
                 clientsocket, address = serversocket.accept()
                 print("Established a socket connection from %s on port %s"
                       % address)
                 self.serial = clientsocket
-                # sample begin
-                while True:
-                    print(self.search_servo_ids())
-                # sample end
+                self.serversocket = serversocket
             except socket.timeout:
                 print("Error establishing a socket connection")
                 serversocket.close()
@@ -203,7 +202,6 @@ class ARMH7Interface(object):
         if self.serial.__class__.__name__ == 'Serial':
             self.check_firmware_version()
             self.copy_worm_params_from_flash()
-            self.search_worm_ids()
             # Set a baseline threshold value
             # before sending joint angle commands
             # with ref_angle in the WormModule.
@@ -211,9 +209,19 @@ class ARMH7Interface(object):
                 WormmoduleStruct, 'thleshold', 30 * np.ones(max_sensor_num))
             self.write_cstruct_slot_v(
                 WormmoduleStruct, 'thleshold_scale', np.ones(max_sensor_num))
+            self.all_jointbase_sensors()
+        self.search_worm_ids()
         self.search_servo_ids()
-        self.all_jointbase_sensors()
+        # sample begin
+        # while True:
+            # print(11111111111)
+            # # print(self.search_servo_ids())
+            # self.angle_vector([np.deg2rad(135),np.deg2rad(275)],[0,2])
+            # import time
+            # time.sleep(1)
+        # sample end
         return True
+
 
     @staticmethod
     def from_port(port=None):
@@ -261,6 +269,8 @@ class ARMH7Interface(object):
         if self.serial:
             self.serial.close()
         self.serial = None
+        if self.serversocket:
+            self.serversocket.close()
 
     def is_opened(self):
         return self.serial is not None
@@ -304,9 +314,10 @@ class ARMH7Interface(object):
                 return read_data[1:len(read_data) - 1]
 
     def socket_write(self, byte_list):
+        print("socket_write")
+        print(list(byte_list))
         if self.serial is None:
             raise RuntimeError('Socket is not opened.')
-
         data_to_send = bytes(byte_list)
         with self.lock:
             try:
@@ -314,6 +325,7 @@ class ARMH7Interface(object):
             except socket.error as e:
                 print(f"Error sending data: {e}")
             ret = self.socket_read()
+            print("socket_read {}".format(ret))
         return ret
 
     def socket_read(self, timeout=None):
@@ -325,13 +337,6 @@ class ARMH7Interface(object):
         start_time = time.time()
         read_data = b''
         while True:
-            remain_time = timeout - (time.time() - start_time)
-            if remain_time <= 0:
-                raise serial.SerialException("Timeout: No data received.")
-            ready, _, _ = select.select(
-                [self.serial], [], [], remain_time)
-            if not ready:
-                continue
             chunk = self.serial.recv(self.socket_in_waiting() or 1)
             if not chunk:
                 raise serial.SerialException(
@@ -623,6 +628,7 @@ class ARMH7Interface(object):
             np.array(servo_ids)].astype(np.uint8)
 
     def _angle_vector(self):
+        return np.zeros(rcb4_dof)
         return self.read_cstruct_slot_vector(
             ServoStruct, slot_name='current_angle')
 
@@ -659,11 +665,11 @@ class ARMH7Interface(object):
             return np.empty(shape=0)
         av = self.servo_angle_vector_to_angle_vector(
             self._angle_vector()[all_servo_ids], all_servo_ids)
-        worm_av = self.read_cstruct_slot_vector(
-            WormmoduleStruct, slot_name='present_angle')
-        for worm_idx in self.search_worm_ids():
-            av[self.servo_id_to_index(
-                self.worm_id_to_servo_id[worm_idx])] = worm_av[worm_idx]
+        # worm_av = self.read_cstruct_slot_vector(
+        #     WormmoduleStruct, slot_name='present_angle')
+        # for worm_idx in self.search_worm_ids():
+        #     av[self.servo_id_to_index(
+        #         self.worm_id_to_servo_id[worm_idx])] = worm_av[worm_idx]
         if servo_ids is not None:
             if len(servo_ids) == 0:
                 return np.empty(shape=0)
@@ -764,6 +770,7 @@ class ARMH7Interface(object):
             return self.servo_sorted_ids
         servo_indices = []
         wheel_indices = []
+
         if self.serial.__class__.__name__ == 'socket':
             byte_list = [0x03, CommandTypes.SearchID.value, 0x23]
             servo_byte_list = self.comm_write(byte_list)
@@ -1031,6 +1038,9 @@ class ARMH7Interface(object):
         indices = []
         self._servo_id_to_worm_id = {}
         self._worm_id_to_servo_id = {}
+        if self.serial.__class__.__name__ == 'socket':
+            self.worm_sorted_ids = indices
+            return indices
         for idx in range(max_sensor_num):
             worm = self.memory_cstruct(WormmoduleStruct, idx)
             if worm.module_type == 1:
