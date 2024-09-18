@@ -175,9 +175,8 @@ class ARMH7Interface(object):
                       % address)
                 self.serial = clientsocket
                 # sample begin
-                i = 0
                 while True:
-                    print(self.check_ack())
+                    print(self.search_servo_ids())
                 # sample end
             except socket.timeout:
                 print("Error establishing a socket connection")
@@ -201,15 +200,17 @@ class ARMH7Interface(object):
         ack = self.check_ack()
         if ack is not True:
             return False
-        self.check_firmware_version()
-        self.copy_worm_params_from_flash()
-        self.search_worm_ids()
-        # Set a baseline threshold value
-        # before sending joint angle commands with ref_angle in the WormModule.
-        self.write_cstruct_slot_v(
-            WormmoduleStruct, 'thleshold', 30 * np.ones(max_sensor_num))
-        self.write_cstruct_slot_v(
-            WormmoduleStruct, 'thleshold_scale', np.ones(max_sensor_num))
+        if self.serial.__class__.__name__ == 'Serial':
+            self.check_firmware_version()
+            self.copy_worm_params_from_flash()
+            self.search_worm_ids()
+            # Set a baseline threshold value
+            # before sending joint angle commands
+            # with ref_angle in the WormModule.
+            self.write_cstruct_slot_v(
+                WormmoduleStruct, 'thleshold', 30 * np.ones(max_sensor_num))
+            self.write_cstruct_slot_v(
+                WormmoduleStruct, 'thleshold_scale', np.ones(max_sensor_num))
         self.search_servo_ids()
         self.all_jointbase_sensors()
         return True
@@ -763,16 +764,23 @@ class ARMH7Interface(object):
             return self.servo_sorted_ids
         servo_indices = []
         wheel_indices = []
-        for idx in range(rcb4_dof):
-            servo = self.memory_cstruct(ServoStruct, idx)
-            if servo.flag > 0:
-                servo_indices.append(idx)
-                if idx not in self._servo_id_to_worm_id:
-                    # wheel
-                    if servo.rotation > 0:
-                        wheel_indices.append(idx)
-                    if servo.feedback > 0:
-                        self.set_cstruct_slot(ServoStruct, idx, 'feedback', 0)
+        if self.serial.__class__.__name__ == 'socket':
+            byte_list = [0x03, CommandTypes.SearchID.value, 0x23]
+            servo_byte_list = self.comm_write(byte_list)
+            servo_indices = list(servo_byte_list[1:])
+            servo_indices = [i * 2 for i in servo_indices]
+        else:
+            for idx in range(rcb4_dof):
+                servo = self.memory_cstruct(ServoStruct, idx)
+                if servo.flag > 0:
+                    servo_indices.append(idx)
+                    if idx not in self._servo_id_to_worm_id:
+                        # wheel
+                        if servo.rotation > 0:
+                            wheel_indices.append(idx)
+                        if servo.feedback > 0:
+                            self.set_cstruct_slot(
+                                ServoStruct, idx, 'feedback', 0)
         servo_indices = np.array(servo_indices)
         self.wheel_servo_sorted_ids = sorted(wheel_indices)
         self.servo_sorted_ids = servo_indices

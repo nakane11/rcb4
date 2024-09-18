@@ -16,6 +16,7 @@ void setup(){
 
   wifiControl.setServerConnection(serverIP, port);
   wifiControl.setPrintFunc([](String message) { M5.Lcd.println(message);});
+  wifiControl.startICS(&Serial1);
   wifiControl.begin();
   M5.Lcd.clear();
   M5.Lcd.setCursor(0, 0);

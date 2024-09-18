@@ -48,6 +48,8 @@ void WiFiControl::begin() {
       print("Failed to connect to server");
     }
   }
+    M5.Lcd.clear();
+    M5.Lcd.setCursor(0, 0);  
   xTaskCreatePinnedToCore([](void *args) {
                             static_cast<WiFiControl*>(args)->rcb4Task(args);
                           }, "rcb4Task", 4096, this, 3, &thp_[0], 0);
@@ -69,8 +71,6 @@ void WiFiControl::setPrintFunc(void (*printFunc)(String)) {
 
 void WiFiControl::rcb4Task(void *args) {
   while (true) {
-    M5.Lcd.clear();
-    M5.Lcd.setCursor(0, 0);
     uint8_t rx_size = read();
     if(rx_size>0){
       rx_buff[0] = rx_size;
@@ -91,6 +91,12 @@ void WiFiControl::rcb4Task(void *args) {
   }
 }
 
+void WiFiControl::startICS(HardwareSerial* serial, byte en_pin, byte tx_pin,
+                           byte rx_pin, long baudrate, int timeout) {
+  krs_ = IcsHardSerialClass(serial, en_pin, baudrate, timeout);
+  serial->begin(baudrate, SERIAL_8E1, rx_pin, tx_pin, false, timeout);
+  krs_.begin();
+}
 
 int WiFiControl::read() {
   connect();
@@ -126,18 +132,37 @@ uint8_t WiFiControl::rcb4_checksum(uint8_t* byte_list, size_t len) {
 void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
   uint8_t command = rx_buffer[1];
   tx_size = 4;
-  tx_buff[0] = tx_size;
-  tx_buff[1] = command;
   tx_buff[2] = 0x06;
-  tx_buff[tx_size-1] = rcb4_checksum(tx_buff, tx_size-1);
 
   switch (command) {
   case ACK_OP: {
     break;
-  } default: break;
+  } case SEARCH_ID_OP: {
+      searchServoId();
+      tx_size = 3 + id_count;
+      for(int i=0;i<id_count;i++) {
+        tx_buff[i+2] = ids[i];
+      }
+      break;
+  }default: break;
   }
+  tx_buff[0] = tx_size;
+  tx_buff[1] = command;
+  tx_buff[tx_size-1] = rcb4_checksum(tx_buff, tx_size-1);
+
   for(int i=0;i<tx_size;i++){
     uint8_t data = tx_buff[i];
     print(String(data));
+  }
+}
+
+void WiFiControl::searchServoId(){
+  id_count = 0;
+  for (int i = 0; i < 18; ++i) {
+    int pos = krs_.getPos(i);
+    if (pos != -1) {
+      ids[id_count] = i;
+      id_count++;
+    }
   }
 }

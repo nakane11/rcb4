@@ -26,6 +26,7 @@ class CommandTypes(Enum):
     MultiServoSingleVelocity = 0x10
     MultiServoMultiVelocities = 0x11
     ServoParam = 0x12
+    SearchID = 0x20
     Version = 0xFD
     AckCheck = 0xFE
     _None = 0xFF
