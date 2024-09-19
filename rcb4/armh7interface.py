@@ -337,7 +337,11 @@ class ARMH7Interface(object):
         start_time = time.time()
         read_data = b''
         while True:
-            chunk = self.serial.recv(self.socket_in_waiting() or 1)
+            try:
+                chunk = self.serial.recv(self.socket_in_waiting() or 1)
+            except ConnectionResetError as e:
+                print(f"Error receiving data: {e}")
+                raise
             if not chunk:
                 raise serial.SerialException(
                     "Timeout: Incomplete data received.")

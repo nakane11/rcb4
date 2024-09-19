@@ -50,6 +50,7 @@ void WiFiControl::begin() {
       if (isConnected()) {
         M5.Lcd.fillScreen(BLUE);
         print("Succeed");
+        delay(500);
         break;
       } else {
         print("Failed to connect to server");
@@ -62,13 +63,15 @@ void WiFiControl::begin() {
   M5.Lcd.setCursor(0, 0);
   xTaskCreatePinnedToCore([](void *args) {
                             static_cast<WiFiControl*>(args)->rcb4Task(args);
-                          }, "rcb4Task", 4096, this, 3, &thp_[0], 0);
+                          }, "rcb4Task", 4096, this, 1, &thp_[0], 0);
 }
 
 void WiFiControl::connect() {
   if (!isConnected()) {
+    client_.stop();
     M5.Lcd.println("try to connect");
     client_.connect(serverIP_, port_);
+    delay(100);
   }
 }
 
@@ -89,16 +92,10 @@ void WiFiControl::rcb4Task(void *args) {
       if(rx_buff[bytesRead] != rcb4_checksum(rx_buff, bytesRead)) {
         continue;
       }
-      /// debug
-      // for(int i=1;i<bytesRead;i++){
-      //   uint8_t data = rx_buff[i];
-      //   print(String(data));
-      // }
-      ///
       executeCmd(rx_buff, bytesRead);
       write(tx_buff,tx_size);
     }
-    delay(1000);
+    delay(200);
   }
 }
 
@@ -149,11 +146,6 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
   tx_size = 4;
   tx_buff[2] = 0x06;
 
-  for(int i=0;i<length;i++){
-    M5.Lcd.print(rx_buffer[i]);
-    M5.Lcd.print(' ');
-  }
-  M5.Lcd.println("");
   switch (command) {
   case ACK_OP: {
     break;
@@ -166,9 +158,9 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
     }
     break;
   }
-  // case M_S_CV_OP: {
-  //   servoCmd(command, &rx_buffer[2]);
-  // }
+  case M_S_CV_OP: {
+    servoCmd(command, &rx_buffer[2]);
+  }
   default: break;
   }
   tx_buff[0] = tx_size;
@@ -189,17 +181,19 @@ void WiFiControl::searchServoId() {
 }
 
 void WiFiControl::servoCmd(uint8_t command, uint8_t* servo_info) {
-  uint16_t ang;
+  uint16_t position;
   int j = 0;
   switch (command) {
   case M_S_CV_OP: {
+    M5.Lcd.clear();
+    M5.Lcd.setCursor(0, 0);
     for (int i=0; i<18; i++) {
       uint8_t idx = i*2;
       if ((servo_info[idx>>3] >> (idx%8)) & 0x1) {
-        ang = *(uint16_t *)&servo_info[7+3*j];
+        position = *(uint16_t *)&servo_info[6+2*j];
         print(String(idx));
-        print(String(ang));
-        // krs_.setPos(idx, ang);
+        print(String(position));
+        krs_.setPos(i, position);
         j++;
       }
     }

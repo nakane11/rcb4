@@ -759,8 +759,7 @@ class RCB4ROSBridge(object):
                 break
             self.publish_joint_states()
             self.publish_servo_on_off()
-            self.interface.servo_sorted_ids = None
-            self.interface.search_servo_ids()
+            self.interface.check_ack()
 
             # if self.publish_imu and self.imu_publisher.get_num_connections():
             #     self.publish_imu_message()
