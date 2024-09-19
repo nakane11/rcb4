@@ -760,7 +760,6 @@ class RCB4ROSBridge(object):
             self.publish_joint_states()
             self.publish_servo_on_off()
             self.interface.check_ack()
-
             # if self.publish_imu and self.imu_publisher.get_num_connections():
             #     self.publish_imu_message()
             # if self.publish_sensor:

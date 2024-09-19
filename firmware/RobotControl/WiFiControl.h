@@ -11,6 +11,7 @@
 
 #define ACK_OP 0xFE
 #define SEARCH_ID_OP 0x20
+#define READ_SERVO_OP 0x21
 #define M_S_CV_OP 0x10
 
 #define BUFF_SIZE 128

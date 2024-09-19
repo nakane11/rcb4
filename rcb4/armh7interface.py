@@ -15,6 +15,8 @@ import numpy as np
 import serial
 import serial.tools.list_ports
 
+from rcb4.asm import decode_servo_ids_from_nbytes_bin
+from rcb4.asm import decode_servo_positions_from_bytes
 from rcb4.asm import encode_servo_ids_to_5bytes_bin
 from rcb4.asm import encode_servo_positions_to_bytes
 from rcb4.asm import encode_servo_velocity_and_position_to_bytes
@@ -212,14 +214,6 @@ class ARMH7Interface(object):
             self.all_jointbase_sensors()
         self.search_worm_ids()
         self.search_servo_ids()
-        # sample begin
-        # while True:
-            # print(11111111111)
-            # # print(self.search_servo_ids())
-            # self.angle_vector([np.deg2rad(135),np.deg2rad(275)],[0,2])
-            # import time
-            # time.sleep(1)
-        # sample end
         return True
 
 
@@ -632,7 +626,6 @@ class ARMH7Interface(object):
             np.array(servo_ids)].astype(np.uint8)
 
     def _angle_vector(self):
-        return np.zeros(rcb4_dof)
         return self.read_cstruct_slot_vector(
             ServoStruct, slot_name='current_angle')
 
@@ -667,8 +660,16 @@ class ARMH7Interface(object):
         all_servo_ids = self.search_servo_ids()
         if len(all_servo_ids) == 0:
             return np.empty(shape=0)
-        av = self.servo_angle_vector_to_angle_vector(
-            self._angle_vector()[all_servo_ids], all_servo_ids)
+        if self.serial.__class__.__name__ == 'socket':
+            byte_list = [0x03, CommandTypes.ReadServo.value, 0x24]
+            servo_byte_list = self.comm_write(byte_list)
+            servo_positions = decode_servo_positions_from_bytes(servo_byte_list[1:])
+            all_servo_ids = self.search_servo_ids()
+            av = self.servo_angle_vector_to_angle_vector(
+                servo_positions, all_servo_ids)
+        else:
+            av = self.servo_angle_vector_to_angle_vector(
+                self._angle_vector()[all_servo_ids], all_servo_ids)
         # worm_av = self.read_cstruct_slot_vector(
         #     WormmoduleStruct, slot_name='present_angle')
         # for worm_idx in self.search_worm_ids():
@@ -777,8 +778,8 @@ class ARMH7Interface(object):
 
         if self.serial.__class__.__name__ == 'socket':
             byte_list = [0x03, CommandTypes.SearchID.value, 0x23]
-            servo_byte_list = self.comm_write(byte_list)
-            servo_indices = list(servo_byte_list[1:])
+            id_byte_list = self.comm_write(byte_list)
+            servo_indices = list(id_byte_list[1:])
             servo_indices = [i * 2 for i in servo_indices]
         else:
             for idx in range(rcb4_dof):

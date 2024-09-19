@@ -161,6 +161,14 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
   case M_S_CV_OP: {
     servoCmd(command, &rx_buffer[2]);
   }
+  case READ_SERVO_OP: {
+    tx_size = 3 + id_count*2;
+    for(int i=0;i<id_count;i++) {
+      uint16_t position = krs_.getPos(ids[i]);
+      tx_buff[2 + i * 2] = position & 0xFF;          // Low byte
+      tx_buff[2 + i * 2 + 1] = (position >> 8) & 0xFF;  // High byte
+    }
+  }
   default: break;
   }
   tx_buff[0] = tx_size;
@@ -191,8 +199,6 @@ void WiFiControl::servoCmd(uint8_t command, uint8_t* servo_info) {
       uint8_t idx = i*2;
       if ((servo_info[idx>>3] >> (idx%8)) & 0x1) {
         position = *(uint16_t *)&servo_info[6+2*j];
-        print(String(idx));
-        print(String(position));
         krs_.setPos(i, position);
         j++;
       }

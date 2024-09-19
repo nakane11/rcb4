@@ -83,6 +83,18 @@ def encode_servo_ids_to_nbytes_bin(
     return [(bit_representation >> (8 * i)) & 0xFF for i in range(num_bytes)]
 
 
+def decode_servo_ids_from_nbytes_bin(encoded_bytes: List[int]) -> List[int]:
+    bit_representation = 0
+    num_bytes = len(encoded_bytes)
+    for i in range(num_bytes):
+        bit_representation |= (encoded_bytes[i] & 0xFF) << (8 * i)
+
+    ids = []
+    for i in range(num_bytes * 8):
+        if bit_representation & (1 << i):
+            ids.append(i)
+    return ids
+
 def encode_servo_ids_to_5bytes_bin(ids: List[int]) -> List[int]:
     """Encode a list of servo motor IDs into a 5-byte representation.
 
@@ -141,6 +153,11 @@ def encode_servo_positions_to_bytes(fvector: List[float]) -> List[int]:
 
     int_positions = np.round(fvector).astype(np.int16)
     return list(int_positions.tobytes())
+
+
+def decode_servo_positions_from_bytes(byte_list: List[int]) -> List[float]:
+    int_positions = np.frombuffer(bytes(byte_list), dtype=np.int16)
+    return int_positions.astype(np.float64).tolist()
 
 
 def encode_servo_velocity_and_position_to_bytes(
