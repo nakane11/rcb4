@@ -1,16 +1,16 @@
 <launch>
 
-  <arg name="urdf_path" default="$(find kxr_models)/urdf/kxrl2l2a6h2m.urdf" />
-  <arg name="servo_config_path" default="$(find kxr_models)/config/kxrl2l2a6h2m_servo_config.yaml" />
+  <arg name="urdf_path" default="$(find hand_v3_model)/urdf/hand_v3_model_dae.urdf" />
+  <arg name="servo_config_path" default="$(find hand_v3_model)/config/hand_v3_servo_config.yaml" />
   <arg name="namespace" default="" />
-  <arg name="publish_imu" default="true" />
+  <arg name="publish_imu" default="false" />
   <arg name="publish_sensor" default="false" />
   <arg name="publish_battery_voltage" default="false" />
   <arg name="control_pressure" default="false" />
   <arg name="imu_frame_id" default="/bodyset94472077639384" />
   <arg name="control_loop_rate" default="20" />
   <arg name="use_rcb4" default="false" doc="Flag to use RCB4 mini board"/>
-  <arg name="device" default="" doc="Device path"/>
+  <arg name="device" default="tcp" doc="Device path"/>
   <arg name="model_server_port" default="8123" />
   <arg name="joint_group_description" default="" />
 

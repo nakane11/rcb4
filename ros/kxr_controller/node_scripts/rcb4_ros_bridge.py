@@ -145,7 +145,6 @@ class RCB4ROSBridge(object):
 
         servo_config_path = rospy.get_param('~servo_config_path')
         self.joint_name_to_id, servo_infos = load_yaml(servo_config_path)
-
         r = RobotModel()
         urdf_path = rospy.get_param('~urdf_path', None)
         tmp_urdf = False
@@ -234,9 +233,9 @@ class RCB4ROSBridge(object):
                 direction * self.interface._joint_to_actuator_matrix[idx, idx]
             trim_vector_servo_ids.append(servo_id)
             trim_vector_offset.append(direction * offset)
-        if self.interface.__class__.__name__ != 'RCB4Interface':
-            self.interface.trim_vector(
-                trim_vector_offset, trim_vector_servo_ids)
+        # if self.interface.__class__.__name__ != 'RCB4Interface':
+        #     self.interface.trim_vector(
+        #         trim_vector_offset, trim_vector_servo_ids)
         if self.interface.wheel_servo_sorted_ids is None:
             self.interface.wheel_servo_sorted_ids = wheel_servo_sorted_ids
 
@@ -372,16 +371,16 @@ class RCB4ROSBridge(object):
 
     def check_servo_states(self):
         self.joint_servo_on = {jn: False for jn in self.joint_names}
-        # servo_on_states = self.interface.servo_states()
+        servo_on_states = self.interface.servo_states()
         for jn in self.joint_names:
             if jn not in self.joint_name_to_id:
                 continue
             idx = self.joint_name_to_id[jn]
             self.joint_servo_on[jn] = False
-            # if idx in servo_on_states:
-            #     self.joint_servo_on[jn] = True
-            # else:
-            #     self.joint_servo_on[jn] = False
+            if idx in servo_on_states:
+                self.joint_servo_on[jn] = True
+            else:
+                self.joint_servo_on[jn] = False
 
     def set_fullbody_controller(self, clean_namespace):
         self.fullbody_jointnames = []
@@ -395,6 +394,7 @@ class RCB4ROSBridge(object):
         set_fullbody_controller(self.fullbody_jointnames)
 
     def set_initial_positions(self, clean_namespace):
+        print("set_initial_position")
         initial_positions = {}
         init_av = self.interface.angle_vector()
         for jn in self.joint_names:
@@ -455,6 +455,7 @@ class RCB4ROSBridge(object):
     def command_joint_state_callback(self, msg):
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
             msg, velocity_control=False)
+        print("command:{}".format(av))        
         if len(av) == 0:
             return
         try:
@@ -759,7 +760,7 @@ class RCB4ROSBridge(object):
                 break
             self.publish_joint_states()
             self.publish_servo_on_off()
-            self.interface.check_ack()
+            # self.interface.check_ack()
             # if self.publish_imu and self.imu_publisher.get_num_connections():
             #     self.publish_imu_message()
             # if self.publish_sensor:

@@ -5,6 +5,7 @@ import select
 import socket
 import struct
 from threading import Lock
+from threading import Thread
 import time
 
 from colorama import Fore
@@ -127,10 +128,12 @@ def padding_bytearray(ba, n):
 class ARMH7Interface(object):
 
     def __init__(self, timeout=0.1):
+        self.ack_thread = None
         self.lock = Lock()
         self.serial = None
         self.serversocket = None
         self.id_vector = None
+        self.servo_on_ids = []
         self.servo_sorted_ids = None
         self.worm_sorted_ids = None
         self._armh7_address = None
@@ -179,6 +182,7 @@ class ARMH7Interface(object):
                       % address)
                 self.serial = clientsocket
                 self.serversocket = serversocket
+                # self.ack_thread = Thread(target=self.check_ack_thread, daemon=True)
             except socket.timeout:
                 print("Error establishing a socket connection")
                 serversocket.close()
@@ -201,6 +205,8 @@ class ARMH7Interface(object):
         ack = self.check_ack()
         if ack is not True:
             return False
+
+        # self.ack_thread.start()
         if self.serial.__class__.__name__ == 'Serial':
             self.check_firmware_version()
             self.copy_worm_params_from_flash()
@@ -213,7 +219,14 @@ class ARMH7Interface(object):
                 WormmoduleStruct, 'thleshold_scale', np.ones(max_sensor_num))
             self.all_jointbase_sensors()
         self.search_worm_ids()
-        self.search_servo_ids()
+        print(self.search_servo_ids())
+        # self.angle_vector([0,0],[2,4],1)
+        # time.sleep(1)
+        # while True:
+        #     self.angle_vector([20,20],[2,4],2)
+        #     time.sleep(1)
+        #     self.angle_vector([0,0],[2,4],2)
+        #     time.sleep(1)
         return True
 
 
@@ -376,6 +389,11 @@ class ARMH7Interface(object):
     def check_ack(self):
         ack_byte_list = self.get_ack()
         return ack_byte_list[1] == 0x06
+
+    def check_ack_thread(self):
+        while True:
+            self.check_ack()
+            time.sleep(8.0)
 
     def check_firmware_version(self):
         version = self.get_version()
@@ -655,12 +673,16 @@ class ARMH7Interface(object):
             servo_ids, svs, velocity=velocity)
 
     def angle_vector(self, av=None, servo_ids=None, velocity=127):
+        print("angle_vector")
+        print(av)
         if av is not None:
             return self._send_angle_vector(av, servo_ids, velocity)
+        print("angle_vector1")
         all_servo_ids = self.search_servo_ids()
         if len(all_servo_ids) == 0:
             return np.empty(shape=0)
         if self.serial.__class__.__name__ == 'socket':
+            print("angle_vector2")
             byte_list = [0x03, CommandTypes.ReadServo.value, 0x24]
             servo_byte_list = self.comm_write(byte_list)
             servo_positions = decode_servo_positions_from_bytes(servo_byte_list[1:])
@@ -830,6 +852,17 @@ class ARMH7Interface(object):
     def free(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
+        if self.serial.__class__.__name__ == 'socket':
+            sorted_indices = np.argsort(servo_ids)
+            sorted_servo_ids = np.array(servo_ids)[sorted_indices]
+            byte_list = [CommandTypes.ServoFree.value] \
+                + encode_servo_ids_to_5bytes_bin(sorted_servo_ids)
+            byte_list.insert(0, 2 + len(byte_list))
+            byte_list.append(rcb4_checksum(byte_list))
+            self.servo_on_ids = [x for x in self.servo_on_ids
+                                 if x not in sorted_servo_ids]
+            return self.comm_write(byte_list)
+
         servo_vector = [32768] * len(servo_ids)
         return self.servo_angle_vector(servo_ids,
                                        servo_vector,
@@ -904,7 +937,9 @@ class ARMH7Interface(object):
         # Add header (length) and checksum to the byte list
         byte_list.insert(0, 2 + len(byte_list))
         byte_list.append(rcb4_checksum(byte_list))
-
+        if self.serial.__class__.__name__ == 'socket':
+            self.servo_on_ids = \
+                list(set(self.servo_on_ids) | set(sorted_servo_ids))
         # send the command
         return self.comm_write(byte_list)
 
@@ -1467,8 +1502,12 @@ class ARMH7Interface(object):
         return self._armh7_address
 
     def servo_states(self):
-        servo_on_indices = np.where(
-            self.reference_angle_vector() != 32768)[0]
+        if self.serial.__class__.__name__ == 'socket':
+            servo_on_indices = self.servo_on_ids
+            print("servo_on:{}".format(servo_on_indices))
+        else:
+            servo_on_indices = np.where(
+                self.reference_angle_vector() != 32768)[0]
         if len(servo_on_indices) > 0:
             servo_on_ids = self.servo_sorted_ids[servo_on_indices]
             # The worm module is always determined to be in the servo-off

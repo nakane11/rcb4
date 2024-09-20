@@ -28,6 +28,7 @@ class CommandTypes(Enum):
     ServoParam = 0x12
     SearchID = 0x20
     ReadServo = 0x21
+    ServoFree = 0x22
     Version = 0xFD
     AckCheck = 0xFE
     _None = 0xFF

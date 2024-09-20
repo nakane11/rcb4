@@ -12,6 +12,7 @@
 #define ACK_OP 0xFE
 #define SEARCH_ID_OP 0x20
 #define READ_SERVO_OP 0x21
+#define SERVO_FREE_OP 0x22
 #define M_S_CV_OP 0x10
 
 #define BUFF_SIZE 128
@@ -57,6 +58,7 @@ private:
   void executeCmd(uint8_t* rx_buffer, size_t length);
   void searchServoId();
   void servoCmd(uint8_t command, uint8_t* servo_info);
+  void setFree(uint8_t command, uint8_t* servo_ids);
 };
 
 #endif

@@ -160,6 +160,7 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
   }
   case M_S_CV_OP: {
     servoCmd(command, &rx_buffer[2]);
+    break;
   }
   case READ_SERVO_OP: {
     tx_size = 3 + id_count*2;
@@ -168,6 +169,11 @@ void WiFiControl::executeCmd(uint8_t* rx_buffer, size_t length) {
       tx_buff[2 + i * 2] = position & 0xFF;          // Low byte
       tx_buff[2 + i * 2 + 1] = (position >> 8) & 0xFF;  // High byte
     }
+    break;
+  }
+  case SERVO_FREE_OP: {
+    setFree(command, &rx_buffer[2]);
+    break;
   }
   default: break;
   }
@@ -193,8 +199,8 @@ void WiFiControl::servoCmd(uint8_t command, uint8_t* servo_info) {
   int j = 0;
   switch (command) {
   case M_S_CV_OP: {
-    M5.Lcd.clear();
-    M5.Lcd.setCursor(0, 0);
+    // M5.Lcd.clear();
+    // M5.Lcd.setCursor(0, 0);
     for (int i=0; i<18; i++) {
       uint8_t idx = i*2;
       if ((servo_info[idx>>3] >> (idx%8)) & 0x1) {
@@ -204,5 +210,17 @@ void WiFiControl::servoCmd(uint8_t command, uint8_t* servo_info) {
       }
     }
   }
+  default: break;
   }
 }
+
+void WiFiControl::setFree(uint8_t command, uint8_t* servo_ids) {
+    M5.Lcd.setCursor(0, 0);
+    for (int i=0; i<18; i++) {
+      uint8_t idx = i*2;
+      if ((servo_ids[idx>>3] >> (idx%8)) & 0x1) {
+        krs_.setFree(i);
+      }
+    }
+}
+

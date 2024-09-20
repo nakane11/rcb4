@@ -9,17 +9,17 @@ void setup(){
   M5.begin();
   M5.Lcd.setRotation(3);  // 画面向き設定（USB位置基準 0：下/ 1：右/ 2：上/ 3：左）
   M5.Lcd.setTextSize(2);  // 文字サイズ（整数倍率）
+   M5.Lcd.clear();
+  M5.Lcd.setCursor(0, 0);
   
-  String ssid = "xxxxxxxx";
-  String pass = "xxxxxxxx";
+  String ssid = "ist-hsr-2.4g";
+  String pass = "89sk389sk3";
   wifiControl.setWiFiConnection(ssid, pass, WIFI_STA);
 
   wifiControl.setServerConnection(serverIP, port);
   wifiControl.setPrintFunc([](String message) { M5.Lcd.println(message);});
   wifiControl.startICS(&Serial1);
   wifiControl.begin();
-  M5.Lcd.clear();
-  M5.Lcd.setCursor(0, 0);
   delay(1000);
 }
 
