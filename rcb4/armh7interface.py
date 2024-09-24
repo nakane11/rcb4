@@ -219,7 +219,8 @@ class ARMH7Interface(object):
                 WormmoduleStruct, 'thleshold_scale', np.ones(max_sensor_num))
             self.all_jointbase_sensors()
         self.search_worm_ids()
-        print(self.search_servo_ids())
+        print(list(self.search_servo_ids()))
+        self.servo_on_ids = list(self.search_servo_ids())
         # self.angle_vector([0,0],[2,4],1)
         # time.sleep(1)
         # while True:
@@ -1503,13 +1504,13 @@ class ARMH7Interface(object):
 
     def servo_states(self):
         if self.serial.__class__.__name__ == 'socket':
-            servo_on_indices = self.servo_on_ids
-            print("servo_on:{}".format(servo_on_indices))
+            servo_on_ids = self.servo_on_ids
+            print("servo_on:{}".format(servo_on_ids))
         else:
             servo_on_indices = np.where(
                 self.reference_angle_vector() != 32768)[0]
-        if len(servo_on_indices) > 0:
-            servo_on_ids = self.servo_sorted_ids[servo_on_indices]
+            if len(servo_on_indices) > 0:
+                servo_on_ids = self.servo_sorted_ids[servo_on_indices]
             # The worm module is always determined to be in the servo-off
             # state because it is erroneously recognized
             # as being in the servo-on state.
