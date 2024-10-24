@@ -11,7 +11,9 @@ import threading
 import xml.etree.ElementTree as ET
 
 import actionlib
+from dynamic_reconfigure.server import Server
 import geometry_msgs.msg
+from kxr_controller.cfg import KXRParameteresConfig as Config
 from kxr_controller.msg import PressureControl
 from kxr_controller.msg import PressureControlAction
 from kxr_controller.msg import PressureControlResult
@@ -210,6 +212,8 @@ class RCB4ROSBridge(object):
             sys.exit(1)
         self._prev_velocity_command = None
 
+        self.srv = Server(Config, self.config_callback)
+
         # set servo ids to rosparam
         rospy.set_param(clean_namespace + '/servo_ids',
                         self.interface.search_servo_ids().tolist())
@@ -376,6 +380,11 @@ class RCB4ROSBridge(object):
         self.command_joint_state_sub.unregister()
         self.velocity_command_joint_state_sub.unregister()
 
+    def config_callback(self, config, level):
+        self.frame_count = config.frame_count
+        self.wheel_frame_count = config.wheel_frame_count
+        return config
+
     def check_servo_states(self):
         self.joint_servo_on = {jn: False for jn in self.joint_names}
         servo_on_states = self.interface.servo_states()
@@ -473,7 +482,8 @@ class RCB4ROSBridge(object):
                 self._prev_velocity_command, av):
             return
         try:
-            self.interface.angle_vector(av, servo_ids, velocity=0)
+            self.interface.angle_vector(
+                av, servo_ids, velocity=self.wheel_frame_count)
             self._prev_velocity_command = av
         except serial.serialutil.SerialException as e:
             rospy.logerr('[velocity_command_joint] {}'.format(str(e)))
@@ -488,16 +498,21 @@ class RCB4ROSBridge(object):
             kondo_msg.id = list(kondo_servo_ids)
             kondo_msg.length = len(kondo_av)
             self.kondo_pub.publish(kondo_msg)
-            # try:
-            #     self.interface.angle_vector(kondo_av, kondo_servo_ids, velocity=1)
-            # except serial.serialutil.SerialException as e:
-            #     rospy.logerr('[command_joint] {}'.format(str(e)))
         if len(futaba_av) != 0:
             futaba_msg = RawAngle()
             futaba_msg.angle = futaba_av
             futaba_msg.id = list(futaba_servo_ids)
             futaba_msg.length = len(futaba_av)
             self.futaba_pub.publish(futaba_msg)
+        # av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
+        #     msg, velocity_control=False)
+        # if len(av) == 0:
+        #     return
+        # try:
+        #     self.interface.angle_vector(
+        #         av, servo_ids, velocity=self.frame_count)
+        # except serial.serialutil.SerialException as e:
+        #     rospy.logerr('[command_joint] {}'.format(str(e)))
 
     def servo_on_off_callback(self, goal):
         servo_vector = []
@@ -763,6 +778,9 @@ class RCB4ROSBridge(object):
             av = self.interface.angle_vector()
             torque_vector = self.interface.servo_error()
         except IndexError as e:
+            rospy.logerr('[publish_joint_states] {}'.format(str(e)))
+            return
+        except ValueError as e:
             rospy.logerr('[publish_joint_states] {}'.format(str(e)))
             return
         except serial.serialutil.SerialException as e:

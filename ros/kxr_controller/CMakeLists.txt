@@ -34,6 +34,7 @@ if(USE_VIRTUALENV)
     catkin_virtualenv
     actionlib
     actionlib_msgs
+    dynamic_reconfigure
     std_msgs
     roscpp
     cmake_modules
@@ -46,6 +47,7 @@ else()
   find_package(catkin REQUIRED COMPONENTS
     actionlib
     actionlib_msgs
+    dynamic_reconfigure
     std_msgs
     roscpp
     cmake_modules
@@ -69,6 +71,11 @@ add_action_files(
 add_message_files(
   DIRECTORY msg
   FILES Stretch.msg ServoOnOff.msg PressureControl.msg
+)
+
+# generate the dynamic_reconfigure config file
+generate_dynamic_reconfigure_options(
+  cfg/KXRParameteres.cfg
 )
 
 generate_messages(

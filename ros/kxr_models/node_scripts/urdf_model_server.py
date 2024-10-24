@@ -32,6 +32,7 @@ class URDFModelServer(object):
                 None)
             if urdf is not None:
                 urdf_path = tempfile.mktemp()
+                rospy.loginfo('Create tmp urdf file {}'.format(urdf_path))
                 with open(urdf_path, "w") as f:
                     f.write(urdf)
                 md5sum = checksum_md5(urdf_path)
@@ -53,6 +54,9 @@ class URDFModelServer(object):
                         rospy.set_param(
                             self.clean_namespace + '/robot_description_viz',
                             f.read())
+                    rospy.loginfo('Delete created urdf {}'.format(urdf_path))
+                    if os.path.exists(urdf_path):
+                        os.remove(urdf_path)
                     continue
 
                 lock_path = compressed_urdf_path + ".lock"
@@ -69,6 +73,7 @@ class URDFModelServer(object):
                             .format(compressed_urdf_path))
                     os.remove(lock_path)
                 finally:
+                    rospy.loginfo('Delete created urdf {}'.format(urdf_path))
                     if os.path.exists(urdf_path):
                         os.remove(urdf_path)
 

@@ -13,6 +13,7 @@
 
   <build_depend>roscpp</build_depend>
   <build_depend>controller_manager</build_depend>
+  <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>hardware_interface</build_depend>
   <build_depend>angles</build_depend>
   <build_depend>urdf</build_depend>
@@ -30,6 +31,7 @@
   <exec_depend>position_controllers</exec_depend>
   <exec_depend>angles</exec_depend>
   <exec_depend>diff_drive_controller</exec_depend>
+  <exec_depend>dynamic_reconfigure</exec_depend>
   <exec_depend>urdf</exec_depend>
   <exec_depend>cmake_modules</exec_depend>
   <exec_depend>kxr_models</exec_depend>
