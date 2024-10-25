@@ -2,9 +2,10 @@
 
   <!-- <arg name="urdf_path" default="$(find kxr_models)/urdf/kxrl2l2a6h2m.urdf" /> -->
   <!-- <arg name="servo_config_path" default="$(find kxr_models)/config/kxrl2l2a6h2m_servo_config.yaml" /> -->
-  <arg name="servo_config_path" default="$(find kxr_models)/config/hand_v3_servo_config.yaml" />
+  <arg name="urdf_path" default="$(find hand_v3_model)/urdf/hand_v3_model_dae.urdf" />
+  <arg name="servo_config_path" default="$(find hand_v3_model)/config/hand_v3_servo_config.yaml" />
   <arg name="namespace" default="" />
-  <arg name="publish_imu" default="true" />
+  <arg name="publish_imu" default="false" />
   <arg name="publish_sensor" default="false" />
   <arg name="publish_battery_voltage" default="false" />
   <arg name="control_pressure" default="false" />
@@ -18,9 +19,9 @@
   <group if="$(eval len(arg('namespace')) > 0)" ns="$(arg namespace)" >
     <param name="control_loop_rate" value="$(arg control_loop_rate)" />
     <param name="model_server_port" value="$(arg model_server_port)" />
-    <node name="http_server_node"
-          pkg="kxr_models" type="http_server_node.py" >
-    </node>
+    <!-- <node name="http_server_node" -->
+    <!--       pkg="kxr_models" type="http_server_node.py" > -->
+    <!-- </node> -->
 
     <group if="$(eval len(arg('joint_group_description')) > 0)"
            ns="joint_group_description" >
@@ -34,7 +35,7 @@
           required="true" >
       <param name="device" type="str" value="$(arg device)" />
       <rosparam subst_value="true" >
-        <!-- urdf_path:  -->
+        urdf_path: $(arg urdf_path)
         servo_config_path: $(arg servo_config_path)
         publish_imu: $(arg publish_imu)
         publish_sensor: $(arg publish_sensor)
@@ -44,9 +45,9 @@
         use_rcb4: $(arg use_rcb4)
       </rosparam>
     </node>
-    <node name="urdf_model_server"
-          pkg="kxr_models" type="urdf_model_server.py" >
-    </node>
+    <!-- <node name="urdf_model_server" -->
+    <!--       pkg="kxr_models" type="urdf_model_server.py" > -->
+    <!-- </node> -->
   </group>
 
   <group unless="$(eval len(arg('namespace')) > 0)">
@@ -68,7 +69,7 @@
           required="true" >
       <param name="device" type="str" value="$(arg device)" />
       <rosparam subst_value="true" >
-        <!-- urdf_path: "" -->
+        urdf_path: $(arg urdf_path)
         servo_config_path: $(arg servo_config_path)
         publish_imu: $(arg publish_imu)
         publish_sensor: $(arg publish_sensor)

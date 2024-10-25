@@ -675,19 +675,20 @@ class ARMH7Interface(object):
         if self.servo_sorted_ids is not None:
             return self.servo_sorted_ids
         servo_indices = []
-        wheel_indices = []
-        for idx in range(rcb4_dof):
-            servo = self.memory_cstruct(ServoStruct, idx)
-            if servo.flag > 0:
-                servo_indices.append(idx)
-                if idx not in self._servo_id_to_worm_id:
-                    # wheel
-                    if servo.rotation > 0:
-                        wheel_indices.append(idx)
-                    if servo.feedback > 0:
-                        self.set_cstruct_slot(ServoStruct, idx, 'feedback', 0)
+        # wheel_indices = []
+        # for idx in range(rcb4_dof):
+        #     servo = self.memory_cstruct(ServoStruct, idx)
+        #     if servo.flag > 0:
+        #         servo_indices.append(idx)
+        #         if idx not in self._servo_id_to_worm_id:
+        #             # wheel
+        #             if servo.rotation > 0:
+        #                 wheel_indices.append(idx)
+        #             if servo.feedback > 0:
+        #                 self.set_cstruct_slot(ServoStruct, idx, 'feedback', 0)
+        servo_indices = [0,1,2,3,4,5,6,7,8,9,11]
         servo_indices = np.array(servo_indices)
-        self.wheel_servo_sorted_ids = sorted(wheel_indices)
+        # self.wheel_servo_sorted_ids = sorted(wheel_indices)
         self.servo_sorted_ids = servo_indices
 
         self._servo_id_to_sequentialized_servo_id = np.nan * np.ones(rcb4_dof)
