@@ -1,5 +1,15 @@
 # rcb4
 
+## Contributing
+
+### Automatic Formatting
+This repository uses `ruff` for both linting and formatting which is configured in `pyproject.toml`, you can run with:
+```
+pip install ruff
+ruff format
+ruff check --fix .
+```
+
 ## For JSK Users
 
 ### Worm Gear Module Calibration Tool

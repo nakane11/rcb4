@@ -18,7 +18,7 @@ def checksum_md5(filename, blocksize=8192):
     """
     filename = str(filename)
     hash_factory = hashlib.md5()
-    with open(filename, 'rb') as f:
-        for chunk in iter(lambda: f.read(blocksize), b''):
+    with open(filename, "rb") as f:
+        for chunk in iter(lambda: f.read(blocksize), b""):
             hash_factory.update(chunk)
     return hash_factory.hexdigest()

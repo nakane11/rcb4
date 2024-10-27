@@ -39,7 +39,6 @@ import yaml
 from rcb4.armh7interface import ARMH7Interface
 from rcb4.rcb4interface import RCB4Interface
 
-
 np.set_printoptions(precision=0, suppress=True)
 
 
@@ -57,42 +56,40 @@ def load_yaml(file_path, Loader=yaml.SafeLoader):
         A dict with the loaded yaml data.
     """
     if not osp.exists(str(file_path)):
-        raise OSError('{} not exists'.format(str(file_path)))
-    with open(osp.expanduser(file_path), 'r') as f:
+        raise OSError(f"{file_path!s} not exists")
+    with open(osp.expanduser(file_path)) as f:
         data = yaml.load(f, Loader=Loader)
-    data = data['joint_name_to_servo_id']
+    data = data["joint_name_to_servo_id"]
     joint_name_to_id = {}
     for name in data:
         if isinstance(data[name], int):
             joint_name_to_id[name] = data[name]
         else:
-            joint_name_to_id[name] = data[name]['id']
+            joint_name_to_id[name] = data[name]["id"]
     return joint_name_to_id, data
 
 
 def make_urdf_file(joint_name_to_id):
-    robot = ET.Element('robot', {
-        'name': 'dummy_robot',
-        'xmlns:xi': 'http://www.w3.org/2001/XInclude'
-    })
+    robot = ET.Element(
+        "robot", {"name": "dummy_robot", "xmlns:xi": "http://www.w3.org/2001/XInclude"}
+    )
 
-    ET.SubElement(robot, 'link', name='base_link')
-    previous_link_name = 'base_link'
+    ET.SubElement(robot, "link", name="base_link")
+    previous_link_name = "base_link"
 
     for joint_name in joint_name_to_id.keys():
         link_name = f"{joint_name}_link"
-        ET.SubElement(robot, 'link', name=link_name)
+        ET.SubElement(robot, "link", name=link_name)
 
-        joint = ET.SubElement(robot, 'joint', name=joint_name,
-                              type='continuous')
-        ET.SubElement(joint, 'parent', link=previous_link_name)
-        ET.SubElement(joint, 'child', link=link_name)
+        joint = ET.SubElement(robot, "joint", name=joint_name, type="continuous")
+        ET.SubElement(joint, "parent", link=previous_link_name)
+        ET.SubElement(joint, "child", link=link_name)
 
         previous_link_name = link_name
 
-    tmp_urdf_file = tempfile.mktemp(suffix='.urdf')
+    tmp_urdf_file = tempfile.mktemp(suffix=".urdf")
     tree = ET.ElementTree(robot)
-    tree.write(tmp_urdf_file, encoding='utf-8', xml_declaration=True)
+    tree.write(tmp_urdf_file, encoding="utf-8", xml_declaration=True)
     return tmp_urdf_file
 
 
@@ -109,50 +106,47 @@ def run_robot_state_publisher(namespace=None):
 def run_kxr_controller(namespace=None):
     command = f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun'
     command += " kxr_controller kxr_controller"
-    command += ' __name=:kxr_controller'
+    command += " __name=:kxr_controller"
     command = shlex.split(command)
     process = subprocess.Popen(command)
     return process
 
 
 def set_initial_position(positions, namespace=None):
-    rospy.set_param(namespace + '/initial_position',
-                    positions)
+    rospy.set_param(namespace + "/initial_position", positions)
 
 
 def set_fullbody_controller(joint_names):
     controller_yaml_dict = {
-        'type': 'position_controllers/JointTrajectoryController',
-        'joints': joint_names,
+        "type": "position_controllers/JointTrajectoryController",
+        "joints": joint_names,
     }
-    rospy.set_param('fullbody_controller', controller_yaml_dict)
+    rospy.set_param("fullbody_controller", controller_yaml_dict)
 
 
 def set_joint_state_controler():
-    rospy.set_param('joint_state_controller', {
-        'type': 'joint_state_controller/JointStateController',
-        'publish_rate': 10
-    })
+    rospy.set_param(
+        "joint_state_controller",
+        {"type": "joint_state_controller/JointStateController", "publish_rate": 10},
+    )
 
 
-def set_robot_description(urdf_path,
-                          param_name='robot_description'):
+def set_robot_description(urdf_path, param_name="robot_description"):
     with open(urdf_path) as f:
         rospy.set_param(param_name, f.read())
 
 
-class RCB4ROSBridge(object):
-
+class RCB4ROSBridge:
     def __init__(self):
         self.proc_controller_spawner = None
         self.proc_robot_state_publisher = None
         self.proc_kxr_controller = None
 
-        servo_config_path = rospy.get_param('~servo_config_path')
+        servo_config_path = rospy.get_param("~servo_config_path")
         self.joint_name_to_id, servo_infos = load_yaml(servo_config_path)
 
         r = RobotModel()
-        urdf_path = rospy.get_param('~urdf_path', None)
+        urdf_path = rospy.get_param("~urdf_path", None)
         tmp_urdf = False
         if urdf_path is None:
             urdf_path = make_urdf_file(self.joint_name_to_id)
@@ -162,67 +156,68 @@ class RCB4ROSBridge(object):
             with no_mesh_load_mode():
                 r.load_urdf_file(f)
 
-        joint_list = [j for j in r.joint_list
-                      if j.__class__.__name__ != 'FixedJoint']
+        joint_list = [j for j in r.joint_list if j.__class__.__name__ != "FixedJoint"]
         self.joint_names = [j.name for j in joint_list]
 
         full_namespace = rospy.get_namespace()
-        last_slash_pos = full_namespace.rfind('/')
-        clean_namespace = full_namespace[:last_slash_pos] \
-            if last_slash_pos != 0 else ''
+        last_slash_pos = full_namespace.rfind("/")
+        clean_namespace = full_namespace[:last_slash_pos] if last_slash_pos != 0 else ""
         self.clean_namespace = clean_namespace
 
         set_robot_description(
-            urdf_path,
-            param_name=clean_namespace + '/robot_description')
+            urdf_path, param_name=clean_namespace + "/robot_description"
+        )
         if tmp_urdf:
             os.remove(urdf_path)
 
         set_joint_state_controler()
         self.current_joint_states_pub = rospy.Publisher(
-            clean_namespace + '/current_joint_states',
-            JointState,
-            queue_size=1)
+            clean_namespace + "/current_joint_states", JointState, queue_size=1
+        )
         # Publish servo state like joint_trajectory_controller
         # https://wiki.ros.org/joint_trajectory_controller#Published_Topics
         self.servo_on_off_pub = rospy.Publisher(
             clean_namespace
-            + '/fullbody_controller/servo_on_off_real_interface'
-            + '/state',
+            + "/fullbody_controller/servo_on_off_real_interface"
+            + "/state",
             ServoOnOff,
-            queue_size=1)
+            queue_size=1,
+        )
 
         self.interface = None
         while not rospy.is_shutdown():
             try:
-                if rospy.get_param('~device', None):
+                if rospy.get_param("~device", None):
                     self.interface = ARMH7Interface.from_port(
-                        rospy.get_param('~device', None))
-                elif rospy.get_param('~use_rcb4'):
+                        rospy.get_param("~device", None)
+                    )
+                elif rospy.get_param("~use_rcb4"):
                     self.interface = RCB4Interface()
                     self.interface.auto_open()
                 else:
                     self.interface = ARMH7Interface.from_port()
                 break
             except serial.SerialException as e:
-                rospy.logerr('Waiting for the port to become available. {}'
-                             .format(e))
+                rospy.logerr(f"Waiting for the port to become available. {e}")
             rospy.sleep(1.0)
         if self.interface is None:
-            rospy.logerr('Could not open port!')
+            rospy.logerr("Could not open port!")
             sys.exit(1)
         self._prev_velocity_command = None
 
         self.srv = Server(Config, self.config_callback)
 
         # set servo ids to rosparam
-        rospy.set_param(clean_namespace + '/servo_ids',
-                        self.interface.search_servo_ids().tolist())
-        self.control_pressure = rospy.get_param('~control_pressure', False)
-        if not rospy.get_param('~use_rcb4') and self.control_pressure is True:
+        rospy.set_param(
+            clean_namespace + "/servo_ids", self.interface.search_servo_ids().tolist()
+        )
+        self.control_pressure = rospy.get_param("~control_pressure", False)
+        if not rospy.get_param("~use_rcb4") and self.control_pressure is True:
             # set air board ids to rosparam
-            rospy.set_param(clean_namespace + '/air_board_ids',
-                            self.interface.search_air_board_ids().tolist())
+            rospy.set_param(
+                clean_namespace + "/air_board_ids",
+                self.interface.search_air_board_ids().tolist(),
+            )
 
         wheel_servo_sorted_ids = []
         trim_vector_servo_ids = []
@@ -230,21 +225,21 @@ class RCB4ROSBridge(object):
         for _, info in servo_infos.items():
             if isinstance(info, int):
                 continue
-            servo_id = info['id']
-            direction = info.get('direction', 1)
-            offset = info.get('offset', 0)
-            if 'type' in info and info['type'] == 'continuous':
+            servo_id = info["id"]
+            direction = info.get("direction", 1)
+            offset = info.get("offset", 0)
+            if "type" in info and info["type"] == "continuous":
                 wheel_servo_sorted_ids.append(servo_id)
             idx = self.interface.servo_id_to_index(servo_id)
             if idx is None:
                 continue
-            self.interface._joint_to_actuator_matrix[idx, idx] = \
+            self.interface._joint_to_actuator_matrix[idx, idx] = (
                 direction * self.interface._joint_to_actuator_matrix[idx, idx]
+            )
             trim_vector_servo_ids.append(servo_id)
             trim_vector_offset.append(direction * offset)
-        if self.interface.__class__.__name__ != 'RCB4Interface':
-            self.interface.trim_vector(
-                trim_vector_offset, trim_vector_servo_ids)
+        if self.interface.__class__.__name__ != "RCB4Interface":
+            self.interface.trim_vector(trim_vector_offset, trim_vector_servo_ids)
         if self.interface.wheel_servo_sorted_ids is None:
             self.interface.wheel_servo_sorted_ids = wheel_servo_sorted_ids
 
@@ -252,65 +247,69 @@ class RCB4ROSBridge(object):
         self.set_initial_positions(clean_namespace)
         self.check_servo_states()
 
-        rospy.loginfo('run kxr_controller')
-        self.proc_kxr_controller = run_kxr_controller(
-            namespace=clean_namespace)
+        rospy.loginfo("run kxr_controller")
+        self.proc_kxr_controller = run_kxr_controller(namespace=clean_namespace)
 
         self.command_joint_state_sub = rospy.Subscriber(
-            clean_namespace + '/command_joint_state',
-            JointState, queue_size=1,
-            callback=self.command_joint_state_callback)
+            clean_namespace + "/command_joint_state",
+            JointState,
+            queue_size=1,
+            callback=self.command_joint_state_callback,
+        )
 
         self.velocity_command_joint_state_sub = rospy.Subscriber(
-            clean_namespace + '/velocity_command_joint_state',
-            JointState, queue_size=1,
-            callback=self.velocity_command_joint_state_callback)
+            clean_namespace + "/velocity_command_joint_state",
+            JointState,
+            queue_size=1,
+            callback=self.velocity_command_joint_state_callback,
+        )
 
         self.servo_on_off_server = actionlib.SimpleActionServer(
-            clean_namespace
-            + '/fullbody_controller/servo_on_off_real_interface',
+            clean_namespace + "/fullbody_controller/servo_on_off_real_interface",
             ServoOnOffAction,
             execute_cb=self.servo_on_off_callback,
-            auto_start=False)
+            auto_start=False,
+        )
         # Avoid 'rospy.exceptions.ROSException: publish() to a closed topic'
         rospy.sleep(0.1)
         self.servo_on_off_server.start()
 
         self.adjust_angle_vector_server = actionlib.SimpleActionServer(
-            clean_namespace
-            + '/fullbody_controller/adjust_angle_vector_interface',
+            clean_namespace + "/fullbody_controller/adjust_angle_vector_interface",
             AdjustAngleVectorAction,
             execute_cb=self.adjust_angle_vector_callback,
-            auto_start=False)
+            auto_start=False,
+        )
         # Avoid 'rospy.exceptions.ROSException: publish() to a closed topic'
         rospy.sleep(0.1)
         self.adjust_angle_vector_server.start()
         self.cancel_motion_pub = rospy.Publisher(
             clean_namespace
-            + '/fullbody_controller/follow_joint_trajectory'
-            + '/cancel',
+            + "/fullbody_controller/follow_joint_trajectory"
+            + "/cancel",
             GoalID,
-            queue_size=1)
+            queue_size=1,
+        )
 
         # TODO(someone) support rcb-4 miniboard
-        if not rospy.get_param('~use_rcb4'):
+        if not rospy.get_param("~use_rcb4"):
             # Stretch
             self.stretch_server = actionlib.SimpleActionServer(
-                clean_namespace
-                + '/fullbody_controller/stretch_interface',
+                clean_namespace + "/fullbody_controller/stretch_interface",
                 StretchAction,
                 execute_cb=self.stretch_callback,
-                auto_start=False)
+                auto_start=False,
+            )
             # Avoid 'rospy.exceptions.ROSException:
             # publish() to a closed topic'
             rospy.sleep(0.1)
             self.stretch_server.start()
             self.stretch_publisher = rospy.Publisher(
-                clean_namespace
-                + '/fullbody_controller/stretch',
+                clean_namespace + "/fullbody_controller/stretch",
                 Stretch,
                 queue_size=1,
-                latch=True)
+                latch=True,
+            )
             # Avoid 'rospy.exceptions.ROSException:
             # publish() to a closed topic'
             rospy.sleep(0.1)
@@ -319,66 +318,66 @@ class RCB4ROSBridge(object):
             if self.control_pressure is True:
                 self.pressure_control_thread = None
                 self.pressure_control_server = actionlib.SimpleActionServer(
-                    clean_namespace
-                    + '/fullbody_controller/pressure_control_interface',
+                    clean_namespace + "/fullbody_controller/pressure_control_interface",
                     PressureControlAction,
                     execute_cb=self.pressure_control_callback,
-                    auto_start=False)
+                    auto_start=False,
+                )
                 # Avoid 'rospy.exceptions.ROSException:
                 # publish() to a closed topic'
                 rospy.sleep(0.1)
                 self.pressure_control_server.start()
                 # Publish state topic like joint_trajectory_controller
-                # https://wiki.ros.org/joint_trajectory_controller#Published_Topics  # NOQA
+                # https://wiki.ros.org/joint_trajectory_controller#Published_Topics
                 self.pressure_control_pub = rospy.Publisher(
                     clean_namespace
-                    + '/fullbody_controller/pressure_control_interface'
-                    + '/state',
+                    + "/fullbody_controller/pressure_control_interface"
+                    + "/state",
                     PressureControl,
-                    queue_size=1)
-                self.air_board_ids = self.interface.search_air_board_ids() \
-                                                   .tolist()
+                    queue_size=1,
+                )
+                self.air_board_ids = self.interface.search_air_board_ids().tolist()
                 self.pressure_control_state = {}
                 for idx in self.air_board_ids:
-                    self.pressure_control_state[f'{idx}'] = {}
-                    self.pressure_control_state[f'{idx}']['start_pressure'] = 0
-                    self.pressure_control_state[f'{idx}']['stop_pressure'] = 0
-                    self.pressure_control_state[f'{idx}']['release'] = True
+                    self.pressure_control_state[f"{idx}"] = {}
+                    self.pressure_control_state[f"{idx}"]["start_pressure"] = 0
+                    self.pressure_control_state[f"{idx}"]["stop_pressure"] = 0
+                    self.pressure_control_state[f"{idx}"]["release"] = True
                 self._pressure_publisher_dict = {}
                 self._avg_pressure_publisher_dict = {}
                 # Record 1 seconds pressure data.
-                hz = rospy.get_param(
-                    self.clean_namespace + '/control_loop_rate', 20)
-                self.recent_pressures = deque([], maxlen=1*int(hz))
+                hz = rospy.get_param(self.clean_namespace + "/control_loop_rate", 20)
+                self.recent_pressures = deque([], maxlen=1 * int(hz))
 
         self.proc_controller_spawner = subprocess.Popen(
-            [f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun',
-             'controller_manager', 'spawner']
-            + ['joint_state_controller', 'fullbody_controller'])
-        self.proc_robot_state_publisher = run_robot_state_publisher(
-            clean_namespace)
+            [
+                f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun',
+                "controller_manager",
+                "spawner",
+            ]
+            + ["joint_state_controller", "fullbody_controller"]
+        )
+        self.proc_robot_state_publisher = run_robot_state_publisher(clean_namespace)
 
-        self.publish_imu = rospy.get_param('~publish_imu', True)
-        self.publish_sensor = rospy.get_param('~publish_sensor', False)
-        self.publish_battery_voltage = rospy.get_param(
-            '~publish_battery_voltage', True)
-        if self.interface.__class__.__name__ == 'RCB4Interface':
+        self.publish_imu = rospy.get_param("~publish_imu", True)
+        self.publish_sensor = rospy.get_param("~publish_sensor", False)
+        self.publish_battery_voltage = rospy.get_param("~publish_battery_voltage", True)
+        if self.interface.__class__.__name__ == "RCB4Interface":
             self.publish_imu = False
             self.publish_sensor = False
         if self.publish_imu:
             self.imu_frame_id = rospy.get_param(
-                '~imu_frame_id', clean_namespace + '/' + r.root_link.name)
+                "~imu_frame_id", clean_namespace + "/" + r.root_link.name
+            )
             self.imu_publisher = rospy.Publisher(
-                clean_namespace + '/imu',
-                sensor_msgs.msg.Imu,
-                queue_size=1)
+                clean_namespace + "/imu", sensor_msgs.msg.Imu, queue_size=1
+            )
         if self.publish_sensor:
             self._sensor_publisher_dict = {}
         if self.publish_battery_voltage:
             self.battery_voltage_publisher = rospy.Publisher(
-                clean_namespace + '/battery_voltage',
-                std_msgs.msg.Float32,
-                queue_size=1)
+                clean_namespace + "/battery_voltage", std_msgs.msg.Float32, queue_size=1
+            )
 
     def __del__(self):
         if self.proc_controller_spawner:
@@ -432,19 +431,17 @@ class RCB4ROSBridge(object):
             idx = self.interface.servo_id_to_index(servo_id)
             if idx is None:
                 continue
-            initial_positions[jn] = float(
-                np.deg2rad(init_av[idx]))
+            initial_positions[jn] = float(np.deg2rad(init_av[idx]))
         set_initial_position(initial_positions, namespace=clean_namespace)
 
-    def _msg_to_angle_vector_and_servo_ids(
-            self, msg,
-            velocity_control=False):
+    def _msg_to_angle_vector_and_servo_ids(self, msg, velocity_control=False):
         used_servo_id = {}
         servo_ids = []
         angle_vector = []
         for name, angle in zip(msg.name, msg.position):
-            if name not in self.joint_name_to_id or \
-               (name in self.joint_servo_on and not self.joint_servo_on[name]):
+            if name not in self.joint_name_to_id or (
+                name in self.joint_servo_on and not self.joint_servo_on[name]
+            ):
                 continue
             idx = self.joint_name_to_id[name]
             if velocity_control:
@@ -466,35 +463,35 @@ class RCB4ROSBridge(object):
 
     def velocity_command_joint_state_callback(self, msg):
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
-            msg, velocity_control=True)
+            msg, velocity_control=True
+        )
         if len(av) == 0:
             return
         if self._prev_velocity_command is not None and np.allclose(
-                self._prev_velocity_command, av):
+            self._prev_velocity_command, av
+        ):
             return
         try:
-            self.interface.angle_vector(
-                av, servo_ids, velocity=self.wheel_frame_count)
+            self.interface.angle_vector(av, servo_ids, velocity=self.wheel_frame_count)
             self._prev_velocity_command = av
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[velocity_command_joint] {}'.format(str(e)))
+            rospy.logerr(f"[velocity_command_joint] {e!s}")
 
     def command_joint_state_callback(self, msg):
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
-            msg, velocity_control=False)
+            msg, velocity_control=False
+        )
         if len(av) == 0:
             return
         try:
-            self.interface.angle_vector(
-                av, servo_ids, velocity=self.frame_count)
+            self.interface.angle_vector(av, servo_ids, velocity=self.frame_count)
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[command_joint] {}'.format(str(e)))
+            rospy.logerr(f"[command_joint] {e!s}")
 
     def servo_on_off_callback(self, goal):
         servo_vector = []
         servo_ids = []
-        for joint_name, servo_on in zip(
-                goal.joint_names, goal.servo_on_states):
+        for joint_name, servo_on in zip(goal.joint_names, goal.servo_on_states):
             if joint_name not in self.joint_name_to_id:
                 continue
             servo_ids.append(self.joint_name_to_id[joint_name])
@@ -505,20 +502,18 @@ class RCB4ROSBridge(object):
                 servo_vector.append(32768)
                 self.joint_servo_on[joint_name] = False
         try:
-            self.interface.servo_angle_vector(
-                servo_ids, servo_vector, velocity=1)
+            self.interface.servo_angle_vector(servo_ids, servo_vector, velocity=1)
         except RuntimeError as e:
             self.unsubscribe()
-            rospy.signal_shutdown('Disconnected {}.'.format(e))
+            rospy.signal_shutdown(f"Disconnected {e}.")
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[servo_on_off] {}'.format(str(e)))
+            rospy.logerr(f"[servo_on_off] {e!s}")
         return self.servo_on_off_server.set_succeeded(ServoOnOffResult())
 
     def adjust_angle_vector_callback(self, goal):
         servo_ids = []
         error_thresholds = []
-        for joint_name, error_threshold in zip(
-                goal.joint_names, goal.error_threshold):
+        for joint_name, error_threshold in zip(goal.joint_names, goal.error_threshold):
             if joint_name not in self.joint_name_to_id:
                 continue
             servo_ids.append(self.joint_name_to_id[joint_name])
@@ -526,19 +521,18 @@ class RCB4ROSBridge(object):
         try:
             adjust = self.interface.adjust_angle_vector(
                 servo_ids=servo_ids,
-                error_threshold=np.array(error_thresholds, dtype=np.float32))
+                error_threshold=np.array(error_thresholds, dtype=np.float32),
+            )
             # If adjustment occurs, cancel motion via follow joint trajectory
             if adjust is True:
                 self.cancel_motion_pub.publish(GoalID())
-                rospy.logwarn(
-                    'Stop motion by sending follow joint trajectory cancel.')
+                rospy.logwarn("Stop motion by sending follow joint trajectory cancel.")
         except RuntimeError as e:
             self.unsubscribe()
-            rospy.signal_shutdown('Disconnected {}.'.format(e))
+            rospy.signal_shutdown(f"Disconnected {e}.")
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[adjust_angle_vector] {}'.format(str(e)))
-        return self.adjust_angle_vector_server.set_succeeded(
-            AdjustAngleVectorResult())
+            rospy.logerr(f"[adjust_angle_vector] {e!s}")
+        return self.adjust_angle_vector_server.set_succeeded(AdjustAngleVectorResult())
 
     def publish_stretch(self):
         # Get current stretch of all servo motors and publish them
@@ -552,11 +546,8 @@ class RCB4ROSBridge(object):
         try:
             stretch = self.interface.read_stretch(servo_ids=servo_ids)
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[read_stretch] {}'.format(str(e)))
-        stretch_msg = Stretch(
-            joint_names=joint_names,
-            stretch=stretch
-        )
+            rospy.logerr(f"[read_stretch] {e!s}")
+        stretch_msg = Stretch(joint_names=joint_names, stretch=stretch)
         self.stretch_publisher.publish(stretch_msg)
 
     def stretch_callback(self, goal):
@@ -572,62 +563,59 @@ class RCB4ROSBridge(object):
         # Send new stretch
         stretch = goal.stretch
         try:
-            self.interface.send_stretch(
-                value=stretch, servo_ids=servo_ids)
+            self.interface.send_stretch(value=stretch, servo_ids=servo_ids)
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[send_stretch] {}'.format(str(e)))
+            rospy.logerr(f"[send_stretch] {e!s}")
         # Return result
         self.publish_stretch()
-        rospy.loginfo(
-            "Update {} stretch to {}".format(
-                joint_names, stretch))
+        rospy.loginfo(f"Update {joint_names} stretch to {stretch}")
         return self.stretch_server.set_succeeded(StretchResult())
 
     def publish_pressure(self):
         for idx in self.air_board_ids:
             try:
-                key = f'{idx}'
+                key = f"{idx}"
                 if key not in self._pressure_publisher_dict:
                     self._pressure_publisher_dict[key] = rospy.Publisher(
-                        self.clean_namespace
-                        + '/fullbody_controller/pressure/'+key,
+                        self.clean_namespace + "/fullbody_controller/pressure/" + key,
                         std_msgs.msg.Float32,
-                        queue_size=1)
+                        queue_size=1,
+                    )
                     self._avg_pressure_publisher_dict[key] = rospy.Publisher(
                         self.clean_namespace
-                        + '/fullbody_controller/average_pressure/'+key,
+                        + "/fullbody_controller/average_pressure/"
+                        + key,
                         std_msgs.msg.Float32,
-                        queue_size=1)
+                        queue_size=1,
+                    )
                     # Avoid 'rospy.exceptions.ROSException:
                     # publish() to a closed topic'
                     rospy.sleep(0.1)
                 pressure = self.read_pressure_sensor(idx)
                 self._pressure_publisher_dict[key].publish(
-                    std_msgs.msg.Float32(data=pressure))
+                    std_msgs.msg.Float32(data=pressure)
+                )
                 # Publish average pressure (noise removed pressure)
                 self._avg_pressure_publisher_dict[key].publish(
-                    std_msgs.msg.Float32(data=self.average_pressure))
+                    std_msgs.msg.Float32(data=self.average_pressure)
+                )
             except serial.serialutil.SerialException as e:
-                rospy.logerr('[publish_pressure] {}'.format(str(e)))
+                rospy.logerr(f"[publish_pressure] {e!s}")
 
     def publish_pressure_control(self):
         for idx in list(self.pressure_control_state.keys()):
             idx = int(idx)
             msg = PressureControl()
             msg.board_idx = idx
-            msg.start_pressure = self.pressure_control_state[
-                f'{idx}']['start_pressure']
-            msg.stop_pressure = self.pressure_control_state[
-                f'{idx}']['stop_pressure']
-            msg.release = self.pressure_control_state[f'{idx}']['release']
+            msg.start_pressure = self.pressure_control_state[f"{idx}"]["start_pressure"]
+            msg.stop_pressure = self.pressure_control_state[f"{idx}"]["stop_pressure"]
+            msg.release = self.pressure_control_state[f"{idx}"]["release"]
             self.pressure_control_pub.publish(msg)
 
-    def pressure_control_loop(
-            self, idx, start_pressure, stop_pressure, release):
-        self.pressure_control_state[
-            f'{idx}']['start_pressure'] = start_pressure
-        self.pressure_control_state[f'{idx}']['stop_pressure'] = stop_pressure
-        self.pressure_control_state[f'{idx}']['release'] = release
+    def pressure_control_loop(self, idx, start_pressure, stop_pressure, release):
+        self.pressure_control_state[f"{idx}"]["start_pressure"] = start_pressure
+        self.pressure_control_state[f"{idx}"]["stop_pressure"] = stop_pressure
+        self.pressure_control_state[f"{idx}"]["release"] = release
         if self.pressure_control_running is False:
             return
         if release is True:
@@ -651,7 +639,7 @@ class RCB4ROSBridge(object):
                 self.recent_pressures.append(pressure)
                 return pressure
             except serial.serialutil.SerialException as e:
-                rospy.logerr('[read_pressure_sensor] {}'.format(str(e)))
+                rospy.logerr(f"[read_pressure_sensor] {e!s}")
                 if force is True:
                     continue
 
@@ -672,30 +660,26 @@ class RCB4ROSBridge(object):
             self.interface.close_air_connect_valve()
             self.interface.close_work_valve(idx)
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[release_vacuum] {}'.format(str(e)))
+            rospy.logerr(f"[release_vacuum] {e!s}")
 
     def start_vacuum(self, idx):
-        """Vacuum air in work
-
-        """
+        """Vacuum air in work"""
         try:
             self.interface.start_pump()
             self.interface.open_work_valve(idx)
             self.interface.close_air_connect_valve()
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[start_vacuum] {}'.format(str(e)))
+            rospy.logerr(f"[start_vacuum] {e!s}")
 
     def stop_vacuum(self, idx):
-        """Seal air in work
-
-        """
+        """Seal air in work"""
         try:
             self.interface.close_work_valve(idx)
             self.interface.close_air_connect_valve()
             rospy.sleep(0.3)  # Wait for valve to close completely
             self.interface.stop_pump()
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[stop_vacuum] {}'.format(str(e)))
+            rospy.logerr(f"[stop_vacuum] {e!s}")
 
     def pressure_control_callback(self, goal):
         if self.pressure_control_thread is not None:
@@ -712,11 +696,16 @@ class RCB4ROSBridge(object):
         self.pressure_control_running = True
         self.pressure_control_thread = threading.Thread(
             target=self.pressure_control_loop,
-            args=(idx, start_pressure, stop_pressure, release,),
-            daemon=True)
+            args=(
+                idx,
+                start_pressure,
+                stop_pressure,
+                release,
+            ),
+            daemon=True,
+        )
         self.pressure_control_thread.start()
-        return self.pressure_control_server.set_succeeded(
-            PressureControlResult())
+        return self.pressure_control_server.set_succeeded(PressureControlResult())
 
     def publish_imu_message(self):
         msg = sensor_msgs.msg.Imu()
@@ -725,14 +714,17 @@ class RCB4ROSBridge(object):
         try:
             q_wxyz, acc, gyro = self.interface.read_imu_data()
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[publish_imu] {}'.format(str(e)))
+            rospy.logerr(f"[publish_imu] {e!s}")
             return
-        (msg.orientation.w, msg.orientation.x,
-         msg.orientation.y, msg.orientation.z) = q_wxyz
-        (msg.angular_velocity.x, msg.angular_velocity.y,
-         msg.angular_velocity.z) = gyro
-        (msg.linear_acceleration.x, msg.linear_acceleration.y,
-         msg.linear_acceleration.z) = acc
+        (msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z) = (
+            q_wxyz
+        )
+        (msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z) = gyro
+        (
+            msg.linear_acceleration.x,
+            msg.linear_acceleration.y,
+            msg.linear_acceleration.z,
+        ) = acc
         self.imu_publisher.publish(msg)
 
     def publish_sensor_values(self):
@@ -742,51 +734,48 @@ class RCB4ROSBridge(object):
         try:
             sensors = self.interface.all_jointbase_sensors()
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[publish_sensor_values] {}'.format(str(e)))
+            rospy.logerr(f"[publish_sensor_values] {e!s}")
             return
         for sensor in sensors:
             for i in range(4):
-                for typ in ['proximity', 'force']:
-                    key = 'kjs_{}_{}_{}'.format(sensor.id, typ, i)
-                    if typ == 'proximity':
+                for typ in ["proximity", "force"]:
+                    key = f"kjs_{sensor.id}_{typ}_{i}"
+                    if typ == "proximity":
                         msg.wrench.force.x = sensor.ps[i]
-                    elif typ == 'force':
+                    elif typ == "force":
                         msg.wrench.force.x = sensor.adc[i]
                     if key not in self._sensor_publisher_dict:
                         self._sensor_publisher_dict[key] = rospy.Publisher(
-                            self.clean_namespace
-                            + '/kjs/{}/{}/{}'.format(sensor.id, typ, i),
+                            self.clean_namespace + f"/kjs/{sensor.id}/{typ}/{i}",
                             geometry_msgs.msg.WrenchStamped,
-                            queue_size=1)
+                            queue_size=1,
+                        )
                         # Avoid 'rospy.exceptions.ROSException:
                         # publish() to a closed topic'
                         rospy.sleep(0.1)
-                    msg.header.frame_id = 'kjs_{}_{}_frame'.format(
-                        sensor.id, i)
+                    msg.header.frame_id = f"kjs_{sensor.id}_{i}_frame"
                     self._sensor_publisher_dict[key].publish(msg)
 
     def publish_battery_voltage_value(self):
         try:
             volt = self.interface.battery_voltage()
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[publish_battery_voltage] {}'.format(str(e)))
+            rospy.logerr(f"[publish_battery_voltage] {e!s}")
             return
-        self.battery_voltage_publisher.publish(
-            std_msgs.msg.Float32(
-                data=volt))
+        self.battery_voltage_publisher.publish(std_msgs.msg.Float32(data=volt))
 
     def publish_joint_states(self):
         try:
             av = self.interface.angle_vector()
             torque_vector = self.interface.servo_error()
         except IndexError as e:
-            rospy.logerr('[publish_joint_states] {}'.format(str(e)))
+            rospy.logerr(f"[publish_joint_states] {e!s}")
             return
         except ValueError as e:
-            rospy.logerr('[publish_joint_states] {}'.format(str(e)))
+            rospy.logerr(f"[publish_joint_states] {e!s}")
             return
         except serial.serialutil.SerialException as e:
-            rospy.logerr('[publish_joint_states] {}'.format(str(e)))
+            rospy.logerr(f"[publish_joint_states] {e!s}")
             return
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
@@ -806,13 +795,14 @@ class RCB4ROSBridge(object):
         self.servo_on_off_pub.publish(servo_on_states)
 
     def run(self):
-        rate = rospy.Rate(rospy.get_param(
-            self.clean_namespace + '/control_loop_rate', 20))
+        rate = rospy.Rate(
+            rospy.get_param(self.clean_namespace + "/control_loop_rate", 20)
+        )
 
         while not rospy.is_shutdown():
             if self.interface.is_opened() is False:
                 self.unsubscribe()
-                rospy.signal_shutdown('Disconnected.')
+                rospy.signal_shutdown("Disconnected.")
                 break
             self.publish_joint_states()
             self.publish_servo_on_off()
@@ -823,13 +813,13 @@ class RCB4ROSBridge(object):
                 self.publish_sensor_values()
             if self.publish_battery_voltage:
                 self.publish_battery_voltage_value()
-            if rospy.get_param('~use_rcb4') is False and self.control_pressure:
+            if rospy.get_param("~use_rcb4") is False and self.control_pressure:
                 self.publish_pressure()
                 self.publish_pressure_control()
             rate.sleep()
 
 
-if __name__ == '__main__':
-    rospy.init_node('rcb4_ros_bridge')
-    ros_bridge = RCB4ROSBridge()  # NOQA
+if __name__ == "__main__":
+    rospy.init_node("rcb4_ros_bridge")
+    ros_bridge = RCB4ROSBridge()
     ros_bridge.run()

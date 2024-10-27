@@ -19,17 +19,10 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: 3.8
-    - name: Install Formatting
-      run: |
-        python -m pip install --upgrade pip
-        pip install hacking isort
-    - name: Check Formatting
-      run: |
-        flake8 .
-        grep -rlIP '[^\x00-\x7F]' rcb4 | grep '\.pyx\?' | sort > unicode.out; grep -rlI '# -\*- coding: \(utf-8\|latin-1\) -\*-' rcb4 | grep '\.pyx\?' | sort > coding.out; comm -23 unicode.out coding.out > test_code.out; cat test_code.out;  test \! -s test_code.out
-    - name: Check isort
-      run: |
-        isort -c .
+    - name: Install
+      run: pip install ruff
+    - name: Run Ruff
+      run: ruff check .
 
   tests:
     name: Run Unit Tests

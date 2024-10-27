@@ -1,6 +1,5 @@
 import cstruct
 
-
 max_sensor_num = 24
 sensor_sidx = 38
 max_wormmodule_num = max_sensor_num
@@ -49,7 +48,7 @@ struct ServoStruct
   uint8_t temperature;  // servo temperature: 1 - 127
 };
 """)
-ServoStruct.__name__ = 'servo_vector'
+ServoStruct.__name__ = "servo_vector"
 
 
 SensorbaseStruct = cstruct.parse("""
@@ -116,7 +115,7 @@ struct SensorbaseStruct
     uint8_t dummy[2];
 };
 """)
-SensorbaseStruct.__name__ = 'Sensor_vector'
+SensorbaseStruct.__name__ = "Sensor_vector"
 
 
 GPIOStruct = cstruct.parse("""
@@ -128,7 +127,7 @@ struct GPIOStruct
     uint8_t gpio_updated;
 };
 """)
-GPIOStruct.__name__ = 'GPIO_vector'
+GPIOStruct.__name__ = "GPIO_vector"
 
 
 ImuData = cstruct.parse("""
@@ -139,7 +138,7 @@ struct ImuData_t
     int16_t mag[3];
 }
 """)
-ImuData.__name__ = 'imu_data_'
+ImuData.__name__ = "imu_data_"
 
 
 Madgwick = cstruct.parse("""
@@ -166,7 +165,7 @@ struct Madgwick {
   float gyro_norm_thleshold;
 }
 """)
-Madgwick.__name__ = 'Mfilter'
+Madgwick.__name__ = "Mfilter"
 
 
 WormmoduleStruct = cstruct.parse("""
@@ -198,7 +197,7 @@ struct WormmoduleStruct
   uint8_t dummy[3];
 }; //1*4 + 2*4 + 4*14 + 4 = 72byte
 """)
-WormmoduleStruct.__name__ = 'Worm_vector'
+WormmoduleStruct.__name__ = "Worm_vector"
 
 
 SystemStruct = cstruct.parse("""
@@ -231,8 +230,8 @@ struct SystemStruct
   uint8_t ics_comm_stop[6]; // for handshake 6 UARTs param setting
   uint32_t frame_time; // used for ICS comm cycle in uarttasks.c
 };
-""")  # NOQA
-SystemStruct.__name__ = 'SysB'
+""")
+SystemStruct.__name__ = "SysB"
 
 
 DataAddress = cstruct.parse("""
@@ -248,15 +247,15 @@ struct DataAddress
   uint32_t copy_size;
 };
 """)
-DataAddress.__name__ = 'data_address'
+DataAddress.__name__ = "data_address"
 
 
 c_vector = {
-    'servo_vector': 36,
-    'Sensor_vector': max_sensor_num,
-    'imu_data_': 0,
-    'Mfilter': 1,
-    'Worm_vector': max_wormmodule_num,
-    'SysB': 0,
-    'data_address': 0,
+    "servo_vector": 36,
+    "Sensor_vector": max_sensor_num,
+    "imu_data_": 0,
+    "Mfilter": 1,
+    "Worm_vector": max_wormmodule_num,
+    "SysB": 0,
+    "data_address": 0,
 }

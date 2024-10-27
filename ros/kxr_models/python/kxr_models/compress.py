@@ -20,7 +20,7 @@ def make_tarfile(output_filename, source_dir=None):
     """
     if source_dir is None:
         source_dir = output_filename
-        output_filename = "{}.tar.gz".format(source_dir)
+        output_filename = f"{source_dir}.tar.gz"
     with tarfile.open(output_filename, "w:gz") as tar:
         tar.add(source_dir, arcname=osp.basename(source_dir))
     return output_filename
