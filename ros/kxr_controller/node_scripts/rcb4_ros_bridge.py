@@ -125,7 +125,7 @@ def set_fullbody_controller(joint_names):
         'type': 'position_controllers/JointTrajectoryController',
         'joints': joint_names,
     }
-    rospy.set_param('kxr_fullbody_controller', controller_yaml_dict)
+    rospy.set_param('fullbody_controller', controller_yaml_dict)
 
 
 def set_joint_state_controler():
@@ -187,7 +187,7 @@ class RCB4ROSBridge(object):
         # https://wiki.ros.org/joint_trajectory_controller#Published_Topics
         self.servo_on_off_pub = rospy.Publisher(
             clean_namespace
-            + '/kxr_fullbody_controller/servo_on_off_real_interface'
+            + '/fullbody_controller/servo_on_off_real_interface'
             + '/state',
             ServoOnOff,
             queue_size=1)
@@ -268,7 +268,7 @@ class RCB4ROSBridge(object):
 
         self.servo_on_off_server = actionlib.SimpleActionServer(
             clean_namespace
-            + '/kxr_fullbody_controller/servo_on_off_real_interface',
+            + '/fullbody_controller/servo_on_off_real_interface',
             ServoOnOffAction,
             execute_cb=self.servo_on_off_callback,
             auto_start=False)
@@ -278,7 +278,7 @@ class RCB4ROSBridge(object):
 
         self.adjust_angle_vector_server = actionlib.SimpleActionServer(
             clean_namespace
-            + '/kxr_fullbody_controller/adjust_angle_vector_interface',
+            + '/fullbody_controller/adjust_angle_vector_interface',
             AdjustAngleVectorAction,
             execute_cb=self.adjust_angle_vector_callback,
             auto_start=False)
@@ -287,7 +287,7 @@ class RCB4ROSBridge(object):
         self.adjust_angle_vector_server.start()
         self.cancel_motion_pub = rospy.Publisher(
             clean_namespace
-            + '/kxr_fullbody_controller/follow_joint_trajectory'
+            + '/fullbody_controller/follow_joint_trajectory'
             + '/cancel',
             GoalID,
             queue_size=1)
@@ -297,7 +297,7 @@ class RCB4ROSBridge(object):
             # Stretch
             self.stretch_server = actionlib.SimpleActionServer(
                 clean_namespace
-                + '/kxr_fullbody_controller/stretch_interface',
+                + '/fullbody_controller/stretch_interface',
                 StretchAction,
                 execute_cb=self.stretch_callback,
                 auto_start=False)
@@ -307,7 +307,7 @@ class RCB4ROSBridge(object):
             self.stretch_server.start()
             self.stretch_publisher = rospy.Publisher(
                 clean_namespace
-                + '/kxr_fullbody_controller/stretch',
+                + '/fullbody_controller/stretch',
                 Stretch,
                 queue_size=1,
                 latch=True)
@@ -320,7 +320,7 @@ class RCB4ROSBridge(object):
                 self.pressure_control_thread = None
                 self.pressure_control_server = actionlib.SimpleActionServer(
                     clean_namespace
-                    + '/kxr_fullbody_controller/pressure_control_interface',
+                    + '/fullbody_controller/pressure_control_interface',
                     PressureControlAction,
                     execute_cb=self.pressure_control_callback,
                     auto_start=False)
@@ -332,7 +332,7 @@ class RCB4ROSBridge(object):
                 # https://wiki.ros.org/joint_trajectory_controller#Published_Topics  # NOQA
                 self.pressure_control_pub = rospy.Publisher(
                     clean_namespace
-                    + '/kxr_fullbody_controller/pressure_control_interface'
+                    + '/fullbody_controller/pressure_control_interface'
                     + '/state',
                     PressureControl,
                     queue_size=1)
@@ -354,7 +354,7 @@ class RCB4ROSBridge(object):
         self.proc_controller_spawner = subprocess.Popen(
             [f'/opt/ros/{os.environ["ROS_DISTRO"]}/bin/rosrun',
              'controller_manager', 'spawner']
-            + ['joint_state_controller', 'kxr_fullbody_controller'])
+            + ['joint_state_controller', 'fullbody_controller'])
         self.proc_robot_state_publisher = run_robot_state_publisher(
             clean_namespace)
 
@@ -590,12 +590,12 @@ class RCB4ROSBridge(object):
                 if key not in self._pressure_publisher_dict:
                     self._pressure_publisher_dict[key] = rospy.Publisher(
                         self.clean_namespace
-                        + '/kxr_fullbody_controller/pressure/'+key,
+                        + '/fullbody_controller/pressure/'+key,
                         std_msgs.msg.Float32,
                         queue_size=1)
                     self._avg_pressure_publisher_dict[key] = rospy.Publisher(
                         self.clean_namespace
-                        + '/kxr_fullbody_controller/average_pressure/'+key,
+                        + '/fullbody_controller/average_pressure/'+key,
                         std_msgs.msg.Float32,
                         queue_size=1)
                     # Avoid 'rospy.exceptions.ROSException:

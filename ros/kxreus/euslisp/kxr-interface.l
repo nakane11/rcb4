@@ -160,7 +160,7 @@
 (defun kxr-init (&key
                    (namespace nil)
                    (create-viewer t)
-                   (controller-name "kxr_fullbody_controller"))
+                   (controller-name "fullbody_controller"))
   (unless (boundp '*robot*)
     (setq *robot* (load-robot-model :namespace namespace
                                     :server-ip (ros::get-param (if namespace (format nil "~A/model_server_ip" namespace) "/model_server_ip") "localhost")
