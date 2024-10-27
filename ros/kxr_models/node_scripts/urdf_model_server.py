@@ -25,11 +25,15 @@ class URDFModelServer(object):
         rospack = rospkg.RosPack()
         kxr_models_path = rospack.get_path('kxr_models')
 
+        previous_urdf = None
         while not rospy.is_shutdown():
             rate.sleep()
             urdf = rospy.get_param(
                 self.clean_namespace + '/robot_description',
                 None)
+            if previous_urdf is not None and previous_urdf == urdf:
+                continue
+            previous_urdf = urdf
             if urdf is not None:
                 urdf_path = tempfile.mktemp()
                 rospy.loginfo('Create tmp urdf file {}'.format(urdf_path))
