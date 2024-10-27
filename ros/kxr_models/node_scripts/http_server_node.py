@@ -21,8 +21,9 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
     def translate_path(self, path):
         path = super().translate_path(path)
         rel_path = os.path.relpath(path, os.getcwd())
-        full_path = os.path.join(self.base_directory, rel_path) \
-            if self.base_directory else path
+        full_path = (
+            os.path.join(self.base_directory, rel_path) if self.base_directory else path
+        )
         return full_path
 
     def do_GET(self):
@@ -36,17 +37,16 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
             except Timeout:
                 self.send_response(503)
                 self.end_headers()
-                self.wfile.write(
-                    b"Service Unavailable: File is currently locked.")
+                self.wfile.write(b"Service Unavailable: File is currently locked.")
         else:
             super().do_GET()
 
 
-class ThreadedHTTPServer(object):
+class ThreadedHTTPServer:
     def __init__(self, host, port, handler_class, directory):
         def handler_factory(*args, **kwargs):
-            return handler_class(
-                *args, directory=directory, **kwargs)
+            return handler_class(*args, directory=directory, **kwargs)
+
         self.server = HTTPServer((host, port), handler_factory)
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.server_thread.daemon = True
@@ -61,18 +61,19 @@ class ThreadedHTTPServer(object):
         rospy.loginfo("HTTP Server Stopped.")
 
 
-if __name__ == '__main__':
-    rospy.init_node('http_server_node')
+if __name__ == "__main__":
+    rospy.init_node("http_server_node")
 
     rospack = rospkg.RosPack()
-    kxreus_path = rospack.get_path('kxr_models')
-    www_directory = os.path.join(kxreus_path, 'models')
+    kxreus_path = rospack.get_path("kxr_models")
+    www_directory = os.path.join(kxreus_path, "models")
 
     namespace = get_namespace()
-    rospy.set_param(namespace + '/model_server_ip', get_local_ip())
-    port = rospy.get_param(namespace + '/model_server_port', 8123)
+    rospy.set_param(namespace + "/model_server_ip", get_local_ip())
+    port = rospy.get_param(namespace + "/model_server_port", 8123)
     server = ThreadedHTTPServer(
-        '0.0.0.0', port, CustomHTTPRequestHandler, www_directory)
+        "0.0.0.0", port, CustomHTTPRequestHandler, www_directory
+    )
     server.start()
 
     rospy.spin()

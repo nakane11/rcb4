@@ -11,24 +11,24 @@ from setuptools import setup
 version = "0.0.1"
 
 
-if sys.argv[-1] == 'release':
+if sys.argv[-1] == "release":
     # Release via github-actions.
     commands = [
-        'git tag v{:s}'.format(version),
-        'git push origin master --tag',
+        "git tag v{:s}".format(version),
+        "git push origin master --tag",
     ]
     for cmd in commands:
-        print('+ {}'.format(cmd))
+        print("+ {}".format(cmd))
         subprocess.check_call(shlex.split(cmd))
     sys.exit(0)
 
 
 setup_requires = []
 
-with open('requirements.txt') as f:
+with open("requirements.txt") as f:
     install_requires = []
     for line in f:
-        req = line.split('#')[0].strip()
+        req = line.split("#")[0].strip()
         install_requires.append(req)
 
 setup(

@@ -27,9 +27,8 @@ def get_vendor_id_and_product_id(port):
             if p.vid is not None and p.pid is not None:
                 return p.vid, p.pid
             else:
-                raise ValueError(
-                    f'No USB device information found for port {port}')
-    raise ValueError(f'Could not find USB device information for port {port}')
+                raise ValueError(f"No USB device information found for port {port}")
+    raise ValueError(f"Could not find USB device information for port {port}")
 
 
 def reset_usb_device(port):
@@ -50,12 +49,10 @@ def reset_usb_device(port):
     # Create a USB context and open the device by vendor ID and product ID
     context = usb1.USBContext()
     handle = context.openByVendorIDAndProductID(
-        vendor_id,
-        product_id,
-        skip_on_error=True
+        vendor_id, product_id, skip_on_error=True
     )
     if handle is None:
-        raise ValueError('Device not found')
+        raise ValueError("Device not found")
     # Reset the USB device
     handle.resetDevice()
     print(f"USB device {vendor_id:04x}:{product_id:04x} has been reset.")

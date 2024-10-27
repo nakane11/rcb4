@@ -19,7 +19,7 @@ def rcb4_checksum(byte_list: List[int]) -> int:
     int
         The calculated checksum.
     """
-    return sum(b & 0xff for b in byte_list) & 0xff
+    return sum(b & 0xFF for b in byte_list) & 0xFF
 
 
 def rcb4_velocity(v) -> int:
@@ -51,8 +51,7 @@ def rcb4_velocity(v) -> int:
     return max(1, min(255, int(round(v))))
 
 
-def encode_servo_ids_to_nbytes_bin(
-        ids: List[int], num_bytes: int) -> List[int]:
+def encode_servo_ids_to_nbytes_bin(ids: List[int], num_bytes: int) -> List[int]:
     """Encode a list of servo motor IDs into a specified number of bytes.
 
     This function takes a list of servo motor IDs (each between 0 and
@@ -144,7 +143,8 @@ def encode_servo_positions_to_bytes(fvector: List[float]) -> List[int]:
 
 
 def encode_servo_velocity_and_position_to_bytes(
-        velocities: List[float], positions: List[float]) -> List[int]:
+    velocities: List[float], positions: List[float]
+) -> List[int]:
     """Convert lists of servo velocities and positions to a byte sequence.
 
     This function takes lists of servo velocities and positions, clips them to
@@ -192,17 +192,17 @@ def encode_servo_velocity_and_position_to_bytes(
     positions_high = (int_positions >> 8).astype(np.uint8)
 
     velocities_positions = np.vstack(
-        (int_velocities, positions_low, positions_high)).T.flatten()
+        (int_velocities, positions_low, positions_high)
+    ).T.flatten()
     return list(velocities_positions.tobytes())
 
 
 def four_bit_to_num(lst: List[int], values: List[int]):
     result = 0
     for index in lst:
-        result = (result << 4) | (values[index - 1] & 0x0f)
+        result = (result << 4) | (values[index - 1] & 0x0F)
     return result
 
 
 def rcb4_servo_svector(ids: List[int], svector: List[float]) -> List[int]:
-    return [int(round(v)) & 0xff
-            for _, v in zip(ids, svector)]
+    return [int(round(v)) & 0xFF for _, v in zip(ids, svector)]

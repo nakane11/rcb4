@@ -13,7 +13,6 @@ from rcb4.asm import encode_servo_velocity_and_position_to_bytes
 from rcb4.asm import rcb4_checksum
 from rcb4.asm import rcb4_velocity
 
-
 # 4000.0 / 135
 deg_to_servovector = 29.62962962962963
 
@@ -72,7 +71,7 @@ class RomAddr(Enum):
     # The first address where the main loop starts running
     MainLoopCmd = 0x044B
     # The starting address where motion data is stored
-    MotionRomAddress = 0x0b80
+    MotionRomAddress = 0x0B80
 
 
 class ConfigData(Enum):
@@ -82,7 +81,7 @@ class ConfigData(Enum):
     EnableServoResponse = 0x0004
     EnableReferenceTable = 0x0008  # Vector jump switch
     Frame = 0x0030  # Output cycle register [4:5]
-    Baudrate = 0x00c0  # COM baud rate register [6:7] (check for conflicts)
+    Baudrate = 0x00C0  # COM baud rate register [6:7] (check for conflicts)
     ZeroFlag = 0x0100  # Zero flag
     CarrayFlag = 0x0200  # Carry flag
     ProgramError = 0x0400  # Program error flag
@@ -95,8 +94,7 @@ class ConfigData(Enum):
 rcb4_dof = 36  # servo 35 + 1
 
 
-class RCB4Interface(object):
-
+class RCB4Interface:
     # The number of data bytes per motion
     MotionSingleDataCount = 2048
 
@@ -117,8 +115,7 @@ class RCB4Interface(object):
     def __del__(self):
         self.close()
 
-    def open(self, port='/dev/ttyUSB0',
-             baudrate=1250000, timeout=0.01):
+    def open(self, port="/dev/ttyUSB0", baudrate=1250000, timeout=0.01):
         """Opens a serial connection to the RCB4 device.
 
         Parameters
@@ -140,10 +137,9 @@ class RCB4Interface(object):
             If there is an error opening the serial port.
         """
         try:
-            self.serial = serial.Serial(port, baudrate,
-                                        parity='E',
-                                        stopbits=1,
-                                        timeout=timeout)
+            self.serial = serial.Serial(
+                port, baudrate, parity="E", stopbits=1, timeout=timeout
+            )
             print(f"Opened {port} at {baudrate} baud")
         except serial.SerialException as e:
             print(f"Error opening serial port: {e}")
@@ -157,7 +153,7 @@ class RCB4Interface(object):
         return True
 
     def auto_open(self):
-        vendor_id = 0x165c
+        vendor_id = 0x165C
         product_id = 0x0008
         ports = serial.tools.list_ports.comports()
         for port in ports:
@@ -174,7 +170,7 @@ class RCB4Interface(object):
 
     def serial_write(self, byte_list, timeout=10):
         if self.serial is None:
-            raise RuntimeError('Serial is not opened.')
+            raise RuntimeError("Serial is not opened.")
 
         data_to_send = bytes(byte_list)
         with self.lock:
@@ -189,14 +185,15 @@ class RCB4Interface(object):
 
     def serial_read(self, timeout=10):
         if self.serial is None:
-            raise RuntimeError('Serial is not opened.')
+            raise RuntimeError("Serial is not opened.")
 
         self.serial.flushInput()
         start_time = time.time()
-        read_data = b''
+        read_data = b""
         while True:
             ready, _, _ = select.select(
-                [self.serial], [], [], timeout - (time.time() - start_time))
+                [self.serial], [], [], timeout - (time.time() - start_time)
+            )
             if not ready:
                 self.close()
                 raise serial.SerialException("Timeout: No data received.")
@@ -204,11 +201,10 @@ class RCB4Interface(object):
             chunk = self.serial.read(self.serial.in_waiting or 1)
             if not chunk:
                 self.close()
-                raise serial.SerialException(
-                    "Timeout: Incomplete data received.")
+                raise serial.SerialException("Timeout: Incomplete data received.")
             read_data += chunk
             if len(read_data) > 0 and read_data[0] == len(read_data):
-                return read_data[1:len(read_data) - 1]
+                return read_data[1 : len(read_data) - 1]
 
     def get_version(self):
         byte_list = [0x03, CommandTypes.Version.value, 0x00]
@@ -224,10 +220,12 @@ class RCB4Interface(object):
 
     def check_firmware_version(self):
         version = self.get_version()
-        if version != b'\xfdCB-4 V1.0      090715          \xc7':
-            raise RuntimeError('The firmware version is inconsistent. '
-                               'Perhaps are you using not RCB-4mini?'
-                               ' https://kondo-robot.com/product/rcb4_mini')
+        if version != b"\xfdCB-4 V1.0      090715          \xc7":
+            raise RuntimeError(
+                "The firmware version is inconsistent. "
+                + "Perhaps are you using not RCB-4mini?"
+                + " https://kondo-robot.com/product/rcb4_mini"
+            )
 
     @staticmethod
     def move_ram_to_com_command(scr_addr, src_data_size):
@@ -282,11 +280,11 @@ class RCB4Interface(object):
         if len(dest_data) > 249:
             return 0, []
         txbuf = []
-        txbuf.append((len(dest_data) + 7) & 0xff)
+        txbuf.append((len(dest_data) + 7) & 0xFF)
         txbuf.append(CommandTypes.Move.value)
         txbuf.append(SubMoveCmd.ComToRam.value)
-        txbuf.append(dest_addr & 0xff)
-        txbuf.append((dest_addr >> 8) & 0xff)
+        txbuf.append(dest_addr & 0xFF)
+        txbuf.append((dest_addr >> 8) & 0xFF)
         txbuf.append(0x00)
         if len(dest_data) == 1:
             txbuf.append(dest_data[0])
@@ -305,16 +303,16 @@ class RCB4Interface(object):
         if servo_ids is None:
             servo_ids = self.search_servo_ids()
         if len(servo_ids) == 0:
-            return np.empty(shape=0)
-        ref_angles = self._angle_vector('reference')[servo_ids]
+            return np.zeros(shape=0)
+        ref_angles = self._angle_vector("reference")[servo_ids]
         return ref_angles
 
     def servo_error(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.search_servo_ids()
         if len(servo_ids) == 0:
-            return np.empty(shape=0)
-        error_angles = self._angle_vector('error')[servo_ids]
+            return np.zeros(shape=0)
+        error_angles = self._angle_vector("error")[servo_ids]
         return error_angles
 
     def servo_id_to_index(self, servo_id):
@@ -323,11 +321,12 @@ class RCB4Interface(object):
 
     def sequentialized_servo_ids(self, servo_ids):
         if len(servo_ids) == 0:
-            return np.empty(shape=0, dtype=np.uint8)
-        return self._servo_id_to_sequentialized_servo_id[
-            np.array(servo_ids)].astype(np.uint8)
+            return np.zeros(shape=0, dtype=np.uint8)
+        return self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)].astype(
+            np.uint8
+        )
 
-    def _angle_vector(self, slot='current'):
+    def _angle_vector(self, slot="current"):
         rcb4_dof = 35
         offset = 2
         avs = np.zeros((rcb4_dof, 3))
@@ -336,54 +335,52 @@ class RCB4Interface(object):
         for j in range(rcb4_dof // 7):
             ram = 0x90 + (20 * j * 7) + offset
             while True:
-                _, byte_list = self.move_ram_to_com_command(
-                    ram, size)
+                _, byte_list = self.move_ram_to_com_command(ram, size)
                 try:
                     byte_list = self.serial_write(byte_list, timeout=0.1)[1:]
-                except serial.SerialException as _:  # NOQA
+                except serial.SerialException as _:
                     self.auto_open()
                     self.serial.flushInput()
                     continue
                 if len(byte_list) == size:
                     break
-            seg = np.frombuffer(byte_list, dtype='<u2')
+            seg = np.frombuffer(byte_list, dtype="<u2")
             for i in range(7):
                 avs[vi, 0] = seg[i * 10]
                 avs[vi, 1] = seg[i * 10 + 1]
                 avs[vi, 2] = seg[i * 10 + 2]
                 vi += 1
-        if slot == 'current':
+        if slot == "current":
             return avs[:, 1]
-        elif slot == 'reference':
+        elif slot == "reference":
             return avs[:, 2]
-        elif slot == 'error':
+        elif slot == "error":
             return avs[:, 0]
         else:
-            raise ValueError('slot should be ["current", "reference", "error"]'
-                             ' not {}'.format(slot))
+            raise ValueError(
+                'slot should be ["current", "reference", "error"]' f" not {slot}"
+            )
 
     def _send_angle_vector(self, av, servo_ids=None, velocity=127):
         if servo_ids is None:
             servo_ids = self.search_servo_ids()
         if len(av) != len(servo_ids):
-            raise ValueError(
-                'Length of servo_ids and angle_vector must be the same.')
+            raise ValueError("Length of servo_ids and angle_vector must be the same.")
         av = np.array(av)
         svs = self.angle_vector_to_servo_angle_vector(av, servo_ids)
-        return self.servo_angle_vector(
-            servo_ids, svs, velocity=velocity)
+        return self.servo_angle_vector(servo_ids, svs, velocity=velocity)
 
     def angle_vector(self, av=None, servo_ids=None, velocity=127):
         if av is not None:
             return self._send_angle_vector(av, servo_ids, velocity)
         all_servo_ids = self.search_servo_ids()
         if len(all_servo_ids) == 0:
-            return np.empty(shape=0)
+            return np.zeros(shape=0)
         av = np.append(self._angle_vector()[all_servo_ids], 1)
         av = np.matmul(av.T, self.actuator_to_joint_matrix.T)[:-1]
         if servo_ids is not None:
             if len(servo_ids) == 0:
-                return np.empty(shape=0)
+                return np.zeros(shape=0)
             av = av[self.sequentialized_servo_ids(servo_ids)]
         return av
 
@@ -391,10 +388,9 @@ class RCB4Interface(object):
         if servo_ids is None:
             servo_ids = self.search_servo_ids()
         if len(av) != len(servo_ids):
-            raise ValueError(
-                'Length of servo_ids and angle_vector must be the same.')
+            raise ValueError("Length of servo_ids and angle_vector must be the same.")
         if len(servo_ids) == 0:
-            return np.empty(shape=0)
+            return np.zeros(shape=0)
         seq_indices = self.sequentialized_servo_ids(servo_ids)
         tmp_av = np.append(np.zeros(len(self.servo_sorted_ids)), 1)
         tmp_av[seq_indices] = np.array(av)
@@ -414,37 +410,33 @@ class RCB4Interface(object):
         self._servo_id_to_sequentialized_servo_id = np.nan * np.ones(rcb4_dof)
         servo_indices = np.array(servo_indices)
         if len(servo_indices):
-            self._servo_id_to_sequentialized_servo_id[servo_indices] = \
-                np.arange(len(servo_indices))
-        self.joint_to_actuator_matrix
+            self._servo_id_to_sequentialized_servo_id[servo_indices] = np.arange(
+                len(servo_indices)
+            )
         return servo_indices
 
     def valid_servo_ids(self, servo_ids):
-        return np.isfinite(self._servo_id_to_sequentialized_servo_id[
-            np.array(servo_ids)])
+        return np.isfinite(
+            self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)]
+        )
 
     def hold(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
         servo_vector = [32767] * len(servo_ids)
-        return self.servo_angle_vector(servo_ids,
-                                       servo_vector,
-                                       velocity=127)
+        return self.servo_angle_vector(servo_ids, servo_vector, velocity=127)
 
     def free(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
         servo_vector = [32768] * len(servo_ids)
-        return self.servo_angle_vector(servo_ids,
-                                       servo_vector,
-                                       velocity=127)
+        return self.servo_angle_vector(servo_ids, servo_vector, velocity=127)
 
     def neutral(self, servo_ids=None, velocity=127):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
         av = [0] * len(servo_ids)
-        return self.angle_vector(av, servo_ids,
-                                 velocity=velocity)
+        return self.angle_vector(av, servo_ids, velocity=velocity)
 
     def servo_angle_vector(self, servo_ids, servo_vector, velocity=127):
         """Sends a command to control multiple servos.
@@ -479,8 +471,7 @@ class RCB4Interface(object):
         used for constructing the command byte list.
         """
         if len(servo_ids) != len(servo_vector):
-            raise ValueError(
-                'Length of servo_ids and servo_vector must be the same.')
+            raise ValueError("Length of servo_ids and servo_vector must be the same.")
 
         # Sort the servo vectors based on servo IDs
         sorted_indices = np.argsort(servo_ids)
@@ -488,18 +479,26 @@ class RCB4Interface(object):
         sorted_servo_vector = np.array(servo_vector)[sorted_indices]
 
         # Prepare the command byte list
-        if isinstance(velocity, list) or isinstance(velocity, tuple) \
-           or isinstance(velocity, np.ndarray):
+        if (
+            isinstance(velocity, list)
+            or isinstance(velocity, tuple)
+            or isinstance(velocity, np.ndarray)
+        ):
             sorted_servo_velocities = np.array(velocity)[sorted_indices]
-            byte_list = [CommandTypes.MultiServoMultiVelocities.value] \
-                + encode_servo_ids_to_5bytes_bin(sorted_servo_ids) \
+            byte_list = (
+                [CommandTypes.MultiServoMultiVelocities.value]
+                + encode_servo_ids_to_5bytes_bin(sorted_servo_ids)
                 + encode_servo_velocity_and_position_to_bytes(
-                    sorted_servo_velocities, sorted_servo_vector)
+                    sorted_servo_velocities, sorted_servo_vector
+                )
+            )
         else:
-            byte_list = [CommandTypes.MultiServoSingleVelocity.value] \
-                + encode_servo_ids_to_5bytes_bin(sorted_servo_ids) \
-                + [rcb4_velocity(velocity)] \
+            byte_list = (
+                [CommandTypes.MultiServoSingleVelocity.value]
+                + encode_servo_ids_to_5bytes_bin(sorted_servo_ids)
+                + [rcb4_velocity(velocity)]
                 + encode_servo_positions_to_bytes(sorted_servo_vector)
+            )
 
         # Add header (length) and checksum to the byte list
         byte_list.insert(0, 2 + len(byte_list))
@@ -508,8 +507,9 @@ class RCB4Interface(object):
         # send the command
         return self.serial_write(byte_list)
 
-    def set_servo_parameters_command(self, values, servo_ids=None,
-                                     servo_param_type='stretch'):
+    def set_servo_parameters_command(
+        self, values, servo_ids=None, servo_param_type="stretch"
+    ):
         """Generate a command to modify the parameters of servo motors.
 
         Parameters
@@ -556,8 +556,7 @@ class RCB4Interface(object):
         if not servo_ids:
             return -1, []
         if len(values) != len(servo_ids):
-            raise ValueError('Length of `servo_ids` and `values` '
-                             'must be the same.')
+            raise ValueError("Length of `servo_ids` and `values` " "must be the same.")
 
         # Sort the servo vectors based on servo IDs
         # for consistent command structure
@@ -568,17 +567,16 @@ class RCB4Interface(object):
         byte_list = [CommandTypes.ServoParam.value]
         byte_list.extend(encode_servo_ids_to_5bytes_bin(sorted_servo_ids))
 
-        if servo_param_type == 'stretch':
+        if servo_param_type == "stretch":
             byte_list.append(ServoParams.Stretch.value)
-        elif servo_param_type == 'speed':
+        elif servo_param_type == "speed":
             byte_list.append(ServoParams.Speed.value)
         else:
-            raise ValueError(f'Invalid `servo_param_type`: {servo_param_type}')
+            raise ValueError(f"Invalid `servo_param_type`: {servo_param_type}")
 
         # Clip the values to be within the valid range and convert to
         # unsigned 8-bit integers
-        byte_list.extend(np.clip(
-            sorted_values, 1, 127).astype(np.uint8).tolist())
+        byte_list.extend(np.clip(sorted_values, 1, 127).astype(np.uint8).tolist())
 
         # Insert the length of the command at the beginning and
         # append the checksum at the end
@@ -600,7 +598,8 @@ class RCB4Interface(object):
             servo_ids = self.search_servo_ids()
             servo_length = len(servo_ids)
             self._joint_to_actuator_matrix = np.zeros(
-                (servo_length + 1, servo_length + 1), dtype=np.float32)
+                (servo_length + 1, servo_length + 1), dtype=np.float32
+            )
             self._joint_to_actuator_matrix[:, servo_length] = 7500
             self._joint_to_actuator_matrix[servo_length, servo_length] = 1
             for i in range(servo_length):
@@ -611,20 +610,19 @@ class RCB4Interface(object):
     def actuator_to_joint_matrix(self):
         if self._actuator_to_joint_matrix is None:
             self._actuator_to_joint_matrix = np.linalg.inv(
-                self.joint_to_actuator_matrix)
+                self.joint_to_actuator_matrix
+            )
         return self._actuator_to_joint_matrix
 
     def servo_states(self):
-        servo_on_indices = np.where(
-            self.reference_angle_vector() != 32768)[0]
+        servo_on_indices = np.where(self.reference_angle_vector() != 32768)[0]
         if len(servo_on_indices) > 0:
             servo_on_ids = self.servo_sorted_ids[servo_on_indices]
             return servo_on_ids
         return []
 
     def get_config(self):
-        rxbuf = self.write_move_ram_to_com_command(
-            RamAddr.ConfigRamAddress.value, 2)
+        rxbuf = self.write_move_ram_to_com_command(RamAddr.ConfigRamAddress.value, 2)
         if len(rxbuf) != 2:
             return 0xFFFF
         else:
@@ -662,8 +660,14 @@ class RCB4Interface(object):
         --------
         The function calls the specified address unconditionally.
         """
-        buf = [0x07, CommandTypes.Call.value, rom_addr & 0xff,
-               (rom_addr >> 8) & 0xff, (rom_addr >> 16) & 0xff, 0x00]
+        buf = [
+            0x07,
+            CommandTypes.Call.value,
+            rom_addr & 0xFF,
+            (rom_addr >> 8) & 0xFF,
+            (rom_addr >> 16) & 0xFF,
+            0x00,
+        ]
         buf.append(rcb4_checksum(buf))
         return 4, buf
 
@@ -685,7 +689,8 @@ class RCB4Interface(object):
         within a motion, the jumped motion number is returned.
         """
         rx_len, byte_list = self.move_ram_to_com_command(
-            RamAddr.ProgramCounterRamAddress.value, 10)
+            RamAddr.ProgramCounterRamAddress.value, 10
+        )
         byte_list = self.serial_write(byte_list)[1:]
 
         if not rx_len or len(byte_list) != 10:
@@ -693,8 +698,9 @@ class RCB4Interface(object):
 
         eflfg = sum(byte_list[3:8])
         pcunt = byte_list[0] + (byte_list[1] << 8) + (byte_list[2] << 16)
-        mno = int(((pcunt - RomAddr.MotionRomAddress.value)
-                   / self.MotionSingleDataCount) + 1)
+        mno = int(
+            ((pcunt - RomAddr.MotionRomAddress.value) / self.MotionSingleDataCount) + 1
+        )
         if eflfg == 0 or pcunt < RomAddr.MotionRomAddress.value:
             return 0
         if not (0 <= mno <= 120):
@@ -719,9 +725,8 @@ class RCB4Interface(object):
         self._config_data &= ~ConfigData.EnableServoResponse.value
         self._config_data &= ~ConfigData.EnableReferenceTable.value
         self._config_data &= ~ConfigData.EnableSio.value
-        txbuf = [self._config_data & 0xff, (self._config_data >> 8) & 0xff]
-        return self.write_move_com_to_ram_command(
-            RamAddr.ConfigRamAddress.value, txbuf)
+        txbuf = [self._config_data & 0xFF, (self._config_data >> 8) & 0xFF]
+        return self.write_move_com_to_ram_command(RamAddr.ConfigRamAddress.value, txbuf)
 
     def motion_number_to_address(self, motion_num):
         """Calculates the ROM address for the given motion number.
@@ -742,8 +747,9 @@ class RCB4Interface(object):
         The address calculation is based on the motion number.
         """
         if 0 < motion_num <= self.MaxMotionCount:
-            return (motion_num - 1) * self.MotionSingleDataCount \
-                + RomAddr.MotionRomAddress.value
+            return (
+                motion_num - 1
+            ) * self.MotionSingleDataCount + RomAddr.MotionRomAddress.value
         else:
             return -1
 
@@ -766,8 +772,7 @@ class RCB4Interface(object):
         the specified motion.
         """
         if 0 < motion_num <= self.MaxMotionCount:
-            rx_size, buf = self.call_command(
-                self.motion_number_to_address(motion_num))
+            rx_size, buf = self.call_command(self.motion_number_to_address(motion_num))
             return self.serial_write(buf)
         else:
             return False
@@ -785,10 +790,13 @@ class RCB4Interface(object):
         This method effectively changes the program counter to its
         initial settings after a reset, including resetting various flags.
         """
-        buf = [RomAddr.MainLoopCmd.value & 0xff,
-               (RomAddr.MainLoopCmd.value >> 8) & 0xff] + [0] * 8
+        buf = [
+            RomAddr.MainLoopCmd.value & 0xFF,
+            (RomAddr.MainLoopCmd.value >> 8) & 0xFF,
+        ] + [0] * 8
         return self.write_move_com_to_ram_command(
-            RamAddr.ProgramCounterRamAddress.value, buf)
+            RamAddr.ProgramCounterRamAddress.value, buf
+        )
 
     def resume_motion(self):
         """Resumes the motion that was suspended.
@@ -808,9 +816,8 @@ class RCB4Interface(object):
         self._config_data &= ~ConfigData.EnableServoResponse.value
         self._config_data |= ConfigData.EnableReferenceTable.value
         self._config_data |= ConfigData.EnableSio.value
-        buf = [self._config_data & 0xff, (self._config_data >> 8) & 0xff]
-        return self.write_move_com_to_ram_command(
-            RamAddr.ConfigRamAddress.value, buf)
+        buf = [self._config_data & 0xFF, (self._config_data >> 8) & 0xFF]
+        return self.write_move_com_to_ram_command(RamAddr.ConfigRamAddress.value, buf)
 
     def play_motion(self, motion_num):
         """Plays the specified motion.
@@ -842,11 +849,12 @@ class RCB4Interface(object):
         return self.resume_motion()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     interface = RCB4Interface()
     print(interface.auto_open())
 
     from datetime import datetime
+
     while True:
         start = datetime.now()
         print(interface.angle_vector())
