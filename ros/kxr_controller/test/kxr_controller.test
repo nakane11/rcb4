@@ -20,11 +20,11 @@
           timeout_0: 30
           topic_1: joint_states
           timeout_1: 30
-          topic_2: kxr_fullbody_controller/follow_joint_trajectory/status
+          topic_2: fullbody_controller/follow_joint_trajectory/status
           timeout_2: 30
-          topic_3: kxr_fullbody_controller/servo_on_off_real_interface/status
+          topic_3: fullbody_controller/servo_on_off_real_interface/status
           timeout_3: 30
-          topic_4: kxr_fullbody_controller/servo_on_off/status
+          topic_4: fullbody_controller/servo_on_off/status
           timeout_4: 30
         </rosparam>
     </test>
@@ -53,11 +53,11 @@
         timeout_0: 30
         topic_1: joint_states
         timeout_1: 30
-        topic_2: kxr_fullbody_controller/follow_joint_trajectory/status
+        topic_2: fullbody_controller/follow_joint_trajectory/status
         timeout_2: 30
-        topic_3: kxr_fullbody_controller/servo_on_off_real_interface/status
+        topic_3: fullbody_controller/servo_on_off_real_interface/status
         timeout_3: 30
-        topic_4: kxr_fullbody_controller/servo_on_off/status
+        topic_4: fullbody_controller/servo_on_off/status
         timeout_4: 30
       </rosparam>
     </test>

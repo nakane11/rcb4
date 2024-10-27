@@ -84,9 +84,9 @@ namespace kxr_controller {
     joint_velocity_command_pub_ = nh_.advertise<sensor_msgs::JointState>(clean_namespace + "/velocity_command_joint_state", 1);
 
     ROS_INFO("Waiting for action server to start.");
-    servo_on_off_action_server_ = std::make_shared<ServoOnOffActionServer>(robot_hw_nh, clean_namespace + "/kxr_fullbody_controller/servo_on_off",
+    servo_on_off_action_server_ = std::make_shared<ServoOnOffActionServer>(robot_hw_nh, clean_namespace + "/fullbody_controller/servo_on_off",
                                                                            boost::bind(&KXRRobotHW::execute_servo_on_off_callback, this, _1), false);
-    servo_on_off_action_client_ = std::make_shared<ServoOnOffClient>(clean_namespace + "/kxr_fullbody_controller/servo_on_off_real_interface", true);
+    servo_on_off_action_client_ = std::make_shared<ServoOnOffClient>(clean_namespace + "/fullbody_controller/servo_on_off_real_interface", true);
     servo_on_off_action_client_->waitForServer();
     servo_on_off_action_server_->start();
     ROS_INFO("Action server started, client can send goal.");
