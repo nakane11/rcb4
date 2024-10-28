@@ -497,10 +497,8 @@ class RCB4ROSBridge:
             servo_ids.append(self.joint_name_to_id[joint_name])
             if servo_on:
                 servo_vector.append(32767)
-                self.joint_servo_on[joint_name] = True
             else:
                 servo_vector.append(32768)
-                self.joint_servo_on[joint_name] = False
         try:
             self.interface.servo_angle_vector(servo_ids, servo_vector, velocity=1)
         except RuntimeError as e:
@@ -791,8 +789,12 @@ class RCB4ROSBridge:
         self.current_joint_states_pub.publish(msg)
 
     def publish_servo_on_off(self):
-        servo_on_states = list(self.joint_servo_on.values())
-        self.servo_on_off_pub.publish(servo_on_states)
+        self.check_servo_states()
+        servo_on_off_msg = ServoOnOff()
+        servo_on_off_msg.joint_names = list(self.joint_servo_on.keys())
+        servo_on_off_msg.servo_on_states = list(
+            self.joint_servo_on.values())
+        self.servo_on_off_pub.publish(servo_on_off_msg)
 
     def run(self):
         rate = rospy.Rate(
