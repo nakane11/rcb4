@@ -31,43 +31,50 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
                 break
             rospy.logwarn(f"Waiting {joint_param} set")
             rate.sleep()
-        super().__init__(*args, **kwargs)
+        super(KXRROSRobotInterface, self).__init__(*args, **kwargs)
+        self.use_sim_time = rospy.get_param("/use_sim_time", False)
         # Servo on off client
-        self.servo_on_off_client = actionlib.SimpleActionClient(
-            namespace + "/fullbody_controller/servo_on_off", ServoOnOffAction
-        )
-        self.servo_on_off_client.wait_for_server()
-        # Adjust angle vector client
-        self.adjust_angle_vector_client = actionlib.SimpleActionClient(
-            namespace + "/fullbody_controller/adjust_angle_vector_interface",
-            AdjustAngleVectorAction,
-        )
-        self.adjust_angle_vector_client.wait_for_server()
-        # Stretch client
-        self.stretch_client = actionlib.SimpleActionClient(
-            namespace + "/fullbody_controller/stretch_interface", StretchAction
-        )
-        timeout = rospy.Duration(10.0)
-        self.enabled_stretch = True
-        if not self.stretch_client.wait_for_server(timeout):
-            rospy.logerr("Stretch action server not available.")
-            self.enabled_stretch = False
-        self.stretch_topic_name = namespace + "/fullbody_controller/stretch"
-        # Pressure control client
-        pressure_param = namespace + "/rcb4_ros_bridge/control_pressure"
-        self.control_pressure = rospy.get_param(pressure_param, False)
-        if self.control_pressure is True:
-            self.pressure_control_client = actionlib.SimpleActionClient(
-                namespace + "/fullbody_controller/pressure_control_interface",
-                PressureControlAction,
+        if self.use_sim_time is False:
+            self.servo_on_off_client = actionlib.SimpleActionClient(
+                namespace + "/fullbody_controller/servo_on_off", ServoOnOffAction
             )
-            self.enabled_pressure_control = True
-            if not self.pressure_control_client.wait_for_server(timeout):
-                rospy.logerr("PressureControl action server not available.")
-                self.enabled_pressure_control = False
-            self.pressure_topic_name_base = namespace + "/fullbody_controller/pressure/"
+            self.servo_on_off_client.wait_for_server()
+            # Stretch client
+            self.stretch_client = actionlib.SimpleActionClient(
+                namespace + "/fullbody_controller/stretch_interface", StretchAction
+            )
+            timeout = rospy.Duration(10.0)
+            self.enabled_stretch = True
+            if not self.stretch_client.wait_for_server(timeout):
+                rospy.logerr("Stretch action server not available.")
+                self.enabled_stretch = False
+            self.stretch_topic_name = namespace + "/fullbody_controller/stretch"
+            # Pressure control client
+            pressure_param = namespace + "/rcb4_ros_bridge/control_pressure"
+            self.control_pressure = rospy.get_param(pressure_param, False)
+            if self.control_pressure is True:
+                self.pressure_control_client = actionlib.SimpleActionClient(
+                    namespace + "/fullbody_controller/pressure_control_interface",
+                    PressureControlAction,
+                )
+                self.enabled_pressure_control = True
+                if not self.pressure_control_client.wait_for_server(timeout):
+                    rospy.logerr("PressureControl action server not available.")
+                    self.enabled_pressure_control = False
+                self.pressure_topic_name_base = (
+                    namespace + "/fullbody_controller/pressure/"
+                )
+            # Adjust angle vector client
+            self.adjust_angle_vector_client = actionlib.SimpleActionClient(
+                namespace + "/fullbody_controller/adjust_angle_vector_interface",
+                AdjustAngleVectorAction,
+            )
+            self.adjust_angle_vector_client.wait_for_server()
 
     def servo_on(self, joint_names=None):
+        if self.use_sim_time:
+            rospy.logwarn("In simulation mode, servo on function is disabled.")
+            return
         if joint_names is None:
             joint_names = self.joint_names
         goal = ServoOnOffGoal()
@@ -90,6 +97,9 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         client.send_goal(goal)
 
     def servo_off(self, joint_names=None):
+        if self.use_sim_time:
+            rospy.logwarn("In simulation mode, servo off function is disabled.")
+            return
         if joint_names is None:
             joint_names = self.joint_names
         goal = ServoOnOffGoal()
@@ -102,6 +112,11 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         client.send_goal(goal)
 
     def adjust_angle_vector(self, joint_names=None, error_threshold=None):
+        if self.use_sim_time:
+            rospy.logwarn(
+                "In simulation mode, adjust angle vector function is disabled."
+            )
+            return
         if error_threshold is None:
             error_threshold = np.deg2rad(5)
         if joint_names is None:
