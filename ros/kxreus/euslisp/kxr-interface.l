@@ -8,6 +8,9 @@
                            (server-ip "localhost"))
   (let* ((hash-param-name (if namespace (format nil "~A~A" namespace "/eusmodel_hash") "/eusmodel_hash"))
          (robot-name-param-name (if namespace (format nil "~A~A" namespace "/eus_robot_name") "/eus_robot_name"))
+         (overwrite nil)
+         (exit-flag nil)
+         model
          hash robot-name outpath server-url)
     (setq port (truncate port))
     (while (null hash)
@@ -25,12 +28,18 @@
     (setq outpath (ros::resolve-ros-path (format nil "package://kxreus/models/cache/~A.l" hash)))
     (setq server-url (format nil "http://~A:~A/euslisp/~A.l" server-ip port hash))
 
-    (when (not (probe-file outpath))
-      (while (not (= (unix:system (format nil "wget -O ~A ~A" outpath server-url)) 0))
-        (ros::ros-info (format nil "Waiting model file from server url ~A" server-url))
-        (unix::usleep (* 1000 1000))))
-    (load outpath)
-    (funcall (read-from-string robot-name))))
+    (while (null exit-flag)
+      (when (or (not (probe-file outpath)) overwrite)
+        (ros::ros-info (format nil "Download model file from server url ~A" server-url))
+        (while (not (= (unix:system (format nil "wget -O ~A ~A" outpath server-url)) 0))
+          (ros::ros-info (format nil "Waiting model file from server url ~A" server-url))
+          (unix::usleep (* 1000 1000))))
+      (load outpath)
+      (when (fboundp (read-from-string robot-name))
+        (setq model (funcall (read-from-string robot-name)))
+        (setq exit-flag t))
+      (setq overwrite t))
+    model))
 
 
 (defclass kxr-interface
