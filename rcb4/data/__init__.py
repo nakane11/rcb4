@@ -2,13 +2,16 @@ from collections import namedtuple
 import os
 import os.path as osp
 import subprocess
+from distutils.version import StrictVersion
 
+import pkg_resources
 from colorama import Fore
 from colorama import Style
 import gdown
 
 data_dir = osp.abspath(osp.dirname(__file__))
 _default_cache_dir = osp.expanduser("~/.rcb4")
+gdown_version = pkg_resources.get_distribution("gdown").version
 
 
 ELFINFO = namedtuple("ELFINFO", ["url", "md5sum"])
@@ -45,9 +48,17 @@ def kondoh7_elf(version="v0.6.2"):
     elf_info = elf_infos[version]
     target_path = osp.join(get_cache_dir(), "elf", version + ".elf")
     try:
-        gdown.cached_download(
-            url=elf_info.url, path=target_path, md5=elf_info.md5sum, quiet=True
-        )
+        if StrictVersion(gdown_version) < StrictVersion("5.1.0"):
+            gdown.cached_download(
+                url=elf_info.url, path=target_path, md5=elf_info.md5sum, quiet=True
+            )
+        else:
+            gdown.cached_download(
+                url=elf_info.url,
+                path=target_path,
+                hash=f"md5:{elf_info.md5sum}",
+                quiet=True,
+            )
     except Exception as e:
         print(Fore.RED + str(e))
         print(
@@ -72,9 +83,22 @@ def stlink():
     md5sum = "583a506c8e5e65577d623b5ace992fe5"
     target_path = osp.join(get_cache_dir(), "stlink", "v1.7.0.tar.gz")
     target_dir = osp.join(get_cache_dir(), "stlink", "stlink-1.7.0")
-    gdown.cached_download(
-        url=url, path=target_path, md5=md5sum, quiet=True, postprocess=gdown.extractall
-    )
+    if StrictVersion(gdown_version) < StrictVersion("5.1.0"):
+        gdown.cached_download(
+            url=url,
+            path=target_path,
+            md5=md5sum,
+            quiet=True,
+            postprocess=gdown.extractall,
+        )
+    else:
+        gdown.cached_download(
+            url=url,
+            path=target_path,
+            hash=f"md5:{md5sum}",
+            quiet=True,
+            postprocess=gdown.extractall,
+        )
     ret = subprocess.run(
         f"cd {target_dir} && make",
         shell=True,
