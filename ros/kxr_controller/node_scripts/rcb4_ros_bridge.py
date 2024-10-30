@@ -399,7 +399,7 @@ class RCB4ROSBridge:
         ids = []
         while retry_count == -1 or attempts < retry_count:
             try:
-                if type == 'servo' :
+                if type == 'servo':
                     ids = self.interface.search_servo_ids()
                 elif type == 'air_board':
                     ids = self.interface.search_air_board_ids()
