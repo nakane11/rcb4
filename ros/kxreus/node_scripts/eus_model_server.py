@@ -44,7 +44,17 @@ class EusModelServer:
                 tmp_file = tempfile.mktemp()
                 with open(tmp_file, "w") as f:
                     f.write(urdf)
+                joint_group_description = rospy.get_param(
+                    self.clean_namespace + "/joint_group_description", None
+                )
                 md5sum = checksum_md5(tmp_file)
+                tmp_joint_description_file = None
+                if joint_group_description is not None:
+                    tmp_joint_description_file = tempfile.mktemp(suffix=".yaml")
+                    with open(tmp_joint_description_file, "w") as f:
+                        yaml.dump(joint_group_description, f)
+                    md5sum = md5sum + '-' + checksum_md5(tmp_joint_description_file)
+
                 if previous_md5sum is None or previous_md5sum != md5sum:
                     robot_model = self.load_robot_model(tmp_file)
                 previous_md5sum = md5sum
@@ -60,15 +70,6 @@ class EusModelServer:
                     rospy.set_param(self.clean_namespace + "/eusmodel_hash", md5sum)
                     continue
 
-                joint_group_description = rospy.get_param(
-                    self.clean_namespace + "/joint_group_description", None
-                )
-                tmp_joint_description_file = None
-                if joint_group_description is not None:
-                    tmp_joint_description_file = tempfile.mktemp(suffix=".yaml")
-                    with open(tmp_joint_description_file, "w") as f:
-                        yaml.dump(joint_group_description, f)
-
                 lock_path = eus_path + ".lock"
                 lock = FileLock(lock_path, timeout=10)
                 try:
@@ -81,6 +82,10 @@ class EusModelServer:
                             )
                         rospy.loginfo(f"Eusmodel is saved to {eus_path}")
                     os.remove(lock_path)
+                    rospy.set_param(
+                        self.clean_namespace + "/eus_robot_name", robot_name
+                    )
+                    rospy.set_param(self.clean_namespace + "/eusmodel_hash", md5sum)
                 finally:
                     if os.path.exists(tmp_file):
                         os.remove(tmp_file)
