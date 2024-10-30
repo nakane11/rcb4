@@ -209,15 +209,8 @@ class RCB4ROSBridge:
 
         # set servo ids to rosparam
         rospy.set_param(
-            clean_namespace + "/servo_ids", self.interface.search_servo_ids().tolist()
+            clean_namespace + "/servo_ids", self.get_ids(type='servo')
         )
-        self.control_pressure = rospy.get_param("~control_pressure", False)
-        if not rospy.get_param("~use_rcb4") and self.control_pressure is True:
-            # set air board ids to rosparam
-            rospy.set_param(
-                clean_namespace + "/air_board_ids",
-                self.interface.search_air_board_ids().tolist(),
-            )
 
         wheel_servo_sorted_ids = []
         trim_vector_servo_ids = []
@@ -245,7 +238,7 @@ class RCB4ROSBridge:
 
         self.set_fullbody_controller(clean_namespace)
         self.set_initial_positions(clean_namespace)
-        self.check_servo_states()
+        self.check_servo_states(retry_count=-1)
 
         rospy.loginfo("run kxr_controller")
         self.proc_kxr_controller = run_kxr_controller(namespace=clean_namespace)
@@ -315,6 +308,7 @@ class RCB4ROSBridge:
             rospy.sleep(0.1)
             self.publish_stretch()
             # Pressure control
+            self.control_pressure = rospy.get_param("~control_pressure", False)
             if self.control_pressure is True:
                 self.pressure_control_thread = None
                 self.pressure_control_server = actionlib.SimpleActionServer(
@@ -336,7 +330,11 @@ class RCB4ROSBridge:
                     PressureControl,
                     queue_size=1,
                 )
-                self.air_board_ids = self.interface.search_air_board_ids().tolist()
+                self.air_board_ids = self.get_ids(type='air_board')
+                rospy.set_param(
+                    clean_namespace + "/air_board_ids",
+                    self.air_board_ids
+                )
                 self.pressure_control_state = {}
                 for idx in self.air_board_ids:
                     self.pressure_control_state[f"{idx}"] = {}
@@ -396,9 +394,51 @@ class RCB4ROSBridge:
         self.wheel_frame_count = config.wheel_frame_count
         return config
 
-    def check_servo_states(self):
+    def get_ids(self, type='servo', retry_count=-1):
+        attempts = 0
+        ids = []
+        while retry_count == -1 or attempts < retry_count:
+            try:
+                if type == 'servo' :
+                    ids = self.interface.search_servo_ids()
+                elif type == 'air_board':
+                    ids = self.interface.search_air_board_ids()
+                ids = ids.tolist()
+                break
+            except serial.serialutil.SerialException:
+                rospy.logerr(f"[get_ids] Failed to retrieve {type} ids.")
+                rospy.sleep(0.1)
+                attempts += 1
+                continue
+            except Exception as e:
+                rospy.logerr(f"[get_ids] Unexpected error: {e}")
+                rospy.sleep(0.1)
+                attempts += 1
+                continue
+        return ids
+
+    def check_servo_states(self, retry_count=1):
         self.joint_servo_on = {jn: False for jn in self.joint_names}
-        servo_on_states = self.interface.servo_states()
+        attempts = 0
+        while retry_count == -1 or attempts < retry_count:
+            try:
+                servo_on_states = self.interface.servo_states()
+                break
+            except serial.serialutil.SerialException as e:
+                rospy.logerr(f"[check_servo_states] Failed to retrieve servo states. {e}")
+                rospy.sleep(0.1)
+                attempts += 1
+                continue
+            except Exception as e:
+                rospy.logerr(f"[check_servo_states] Unexpected error: {e}")
+                rospy.sleep(0.1)
+                attempts += 1
+                continue
+        if retry_count != -1 and attempts >= retry_count:
+            rospy.logerr(
+                "[check_servo_states] Failed to retrieve servo states after maximum retries."
+            )
+            return
         for jn in self.joint_names:
             if jn not in self.joint_name_to_id:
                 continue
@@ -421,7 +461,18 @@ class RCB4ROSBridge:
 
     def set_initial_positions(self, clean_namespace):
         initial_positions = {}
-        init_av = self.interface.angle_vector()
+        while True:
+            try:
+                init_av = self.interface.angle_vector()
+                break
+            except serial.serialutil.SerialException:
+                rospy.logerr("[set_initial_positions] Failed to retrieve initial_positions.")
+                rospy.sleep(0.1)
+                continue
+            except Exception as e:
+                rospy.logerr(f"[set_initial_positions] Unexpected error: {e}")
+                rospy.sleep(0.1)
+                continue
         for jn in self.joint_names:
             if jn not in self.joint_name_to_id:
                 continue
@@ -545,6 +596,7 @@ class RCB4ROSBridge:
             stretch = self.interface.read_stretch(servo_ids=servo_ids)
         except serial.serialutil.SerialException as e:
             rospy.logerr(f"[read_stretch] {e!s}")
+            return
         stretch_msg = Stretch(joint_names=joint_names, stretch=stretch)
         self.stretch_publisher.publish(stretch_msg)
 
