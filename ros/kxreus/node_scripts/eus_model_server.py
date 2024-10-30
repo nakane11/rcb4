@@ -82,6 +82,10 @@ class EusModelServer:
                             )
                         rospy.loginfo(f"Eusmodel is saved to {eus_path}")
                     os.remove(lock_path)
+                    rospy.set_param(
+                        self.clean_namespace + "/eus_robot_name", robot_name
+                    )
+                    rospy.set_param(self.clean_namespace + "/eusmodel_hash", md5sum)
                 finally:
                     if os.path.exists(tmp_file):
                         os.remove(tmp_file)
