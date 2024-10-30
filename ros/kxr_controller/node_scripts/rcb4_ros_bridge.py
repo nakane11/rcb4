@@ -184,25 +184,8 @@ class RCB4ROSBridge:
             queue_size=1,
         )
 
-        self.interface = None
-        while not rospy.is_shutdown():
-            try:
-                if rospy.get_param("~device", None):
-                    self.interface = ARMH7Interface.from_port(
-                        rospy.get_param("~device", None)
-                    )
-                elif rospy.get_param("~use_rcb4"):
-                    self.interface = RCB4Interface()
-                    self.interface.auto_open()
-                else:
-                    self.interface = ARMH7Interface.from_port()
-                break
-            except serial.SerialException as e:
-                rospy.logerr(f"Waiting for the port to become available. {e}")
-            rospy.sleep(1.0)
-        if self.interface is None:
-            rospy.logerr("Could not open port!")
-            sys.exit(1)
+        self.use_rcb4 = rospy.get_param("~use_rcb4", False)
+        self.interface = self.setup_interface()
         self._prev_velocity_command = None
 
         self.srv = Server(Config, self.config_callback)
@@ -376,6 +359,22 @@ class RCB4ROSBridge:
             self.battery_voltage_publisher = rospy.Publisher(
                 clean_namespace + "/battery_voltage", std_msgs.msg.Float32, queue_size=1
             )
+
+    def setup_interface(self):
+        while not rospy.is_shutdown():
+            try:
+                if rospy.get_param("~device", None):
+                    return ARMH7Interface.from_port(rospy.get_param("~device"))
+                if self.use_rcb4:
+                    interface = RCB4Interface()
+                    interface.auto_open()
+                    return interface
+                return ARMH7Interface.from_port()
+            except serial.SerialException as e:
+                rospy.logerr(f"Waiting for the port to become available: {e}")
+                rospy.sleep(1.0)
+        rospy.logerr("Could not open port!")
+        sys.exit(1)
 
     def __del__(self):
         if self.proc_controller_spawner:
