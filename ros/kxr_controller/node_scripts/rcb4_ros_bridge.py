@@ -377,6 +377,7 @@ class RCB4ROSBridge:
         sys.exit(1)
 
     def __del__(self):
+        self.unsubscribe()
         if self.proc_controller_spawner:
             self.proc_controller_spawner.kill()
         if self.proc_robot_state_publisher:
@@ -551,9 +552,6 @@ class RCB4ROSBridge:
                 servo_vector.append(32768)
         try:
             self.interface.servo_angle_vector(servo_ids, servo_vector, velocity=1)
-        except RuntimeError as e:
-            self.unsubscribe()
-            rospy.signal_shutdown(f"Disconnected {e}.")
         except serial.serialutil.SerialException as e:
             rospy.logerr(f"[servo_on_off] {e!s}")
         return self.servo_on_off_server.set_succeeded(ServoOnOffResult())
@@ -575,9 +573,6 @@ class RCB4ROSBridge:
             if adjust is True:
                 self.cancel_motion_pub.publish(GoalID())
                 rospy.logwarn("Stop motion by sending follow joint trajectory cancel.")
-        except RuntimeError as e:
-            self.unsubscribe()
-            rospy.signal_shutdown(f"Disconnected {e}.")
         except serial.serialutil.SerialException as e:
             rospy.logerr(f"[adjust_angle_vector] {e!s}")
         return self.adjust_angle_vector_server.set_succeeded(AdjustAngleVectorResult())
@@ -853,10 +848,6 @@ class RCB4ROSBridge:
         )
 
         while not rospy.is_shutdown():
-            if self.interface.is_opened() is False:
-                self.unsubscribe()
-                rospy.signal_shutdown("Disconnected.")
-                break
             self.publish_joint_states()
             self.publish_servo_on_off()
 
