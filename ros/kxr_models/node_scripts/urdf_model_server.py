@@ -36,7 +36,8 @@ class URDFModelServer:
                 continue
 
             previous_urdf = urdf
-            with tempfile.NamedTemporaryFile("w", delete=False) as temp_file:
+            with tempfile.NamedTemporaryFile("w", suffix='.urdf',
+                                             delete=False) as temp_file:
                 temp_file.write(urdf)
                 urdf_path = temp_file.name
 
