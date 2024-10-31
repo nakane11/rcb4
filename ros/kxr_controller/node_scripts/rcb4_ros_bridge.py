@@ -225,20 +225,7 @@ class RCB4ROSBridge:
 
         rospy.loginfo("run kxr_controller")
         self.proc_kxr_controller = run_kxr_controller(namespace=clean_namespace)
-
-        self.command_joint_state_sub = rospy.Subscriber(
-            clean_namespace + "/command_joint_state",
-            JointState,
-            queue_size=1,
-            callback=self.command_joint_state_callback,
-        )
-
-        self.velocity_command_joint_state_sub = rospy.Subscriber(
-            clean_namespace + "/velocity_command_joint_state",
-            JointState,
-            queue_size=1,
-            callback=self.velocity_command_joint_state_callback,
-        )
+        self.subscribe()
 
         self.servo_on_off_server = actionlib.SimpleActionServer(
             clean_namespace + "/fullbody_controller/servo_on_off_real_interface",
@@ -361,18 +348,24 @@ class RCB4ROSBridge:
             )
 
     def setup_interface(self):
+        rospy.loginfo('Try to connect servo control boards.')
         while not rospy.is_shutdown():
+            rospy.loginfo("Waiting for the port to become available")
             try:
                 if rospy.get_param("~device", None):
                     return ARMH7Interface.from_port(rospy.get_param("~device"))
                 if self.use_rcb4:
                     interface = RCB4Interface()
-                    interface.auto_open()
+                    ret = interface.auto_open()
+                    if ret is True:
+                        return interface
+                interface = ARMH7Interface()
+                ret = interface.auto_open()
+                if ret is True:
                     return interface
-                return ARMH7Interface.from_port()
             except serial.SerialException as e:
                 rospy.logerr(f"Waiting for the port to become available: {e}")
-                rospy.sleep(1.0)
+            rospy.sleep(1.0)
         rospy.logerr("Could not open port!")
         sys.exit(1)
 
@@ -384,6 +377,20 @@ class RCB4ROSBridge:
             self.proc_robot_state_publisher.kill()
         if self.proc_kxr_controller:
             self.proc_kxr_controller.kill()
+
+    def subscribe(self):
+        self.command_joint_state_sub = rospy.Subscriber(
+            self.clean_namespace + "/command_joint_state",
+            JointState,
+            queue_size=1,
+            callback=self.command_joint_state_callback,
+        )
+        self.velocity_command_joint_state_sub = rospy.Subscriber(
+            self.clean_namespace + "/velocity_command_joint_state",
+            JointState,
+            queue_size=1,
+            callback=self.velocity_command_joint_state_callback,
+        )
 
     def unsubscribe(self):
         self.command_joint_state_sub.unregister()
@@ -513,6 +520,8 @@ class RCB4ROSBridge:
         return angle_vector[valid_indices], servo_ids[valid_indices]
 
     def velocity_command_joint_state_callback(self, msg):
+        if not self.interface.is_opened():
+            return
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
             msg, velocity_control=True
         )
@@ -529,6 +538,8 @@ class RCB4ROSBridge:
             rospy.logerr(f"[velocity_command_joint] {e!s}")
 
     def command_joint_state_callback(self, msg):
+        if not self.interface.is_opened():
+            return
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
             msg, velocity_control=False
         )
@@ -540,6 +551,8 @@ class RCB4ROSBridge:
             rospy.logerr(f"[command_joint] {e!s}")
 
     def servo_on_off_callback(self, goal):
+        if not self.interface.is_opened():
+            return
         servo_vector = []
         servo_ids = []
         for joint_name, servo_on in zip(goal.joint_names, goal.servo_on_states):
@@ -557,6 +570,8 @@ class RCB4ROSBridge:
         return self.servo_on_off_server.set_succeeded(ServoOnOffResult())
 
     def adjust_angle_vector_callback(self, goal):
+        if not self.interface.is_opened():
+            return
         servo_ids = []
         error_thresholds = []
         for joint_name, error_threshold in zip(goal.joint_names, goal.error_threshold):
@@ -578,6 +593,8 @@ class RCB4ROSBridge:
         return self.adjust_angle_vector_server.set_succeeded(AdjustAngleVectorResult())
 
     def publish_stretch(self):
+        if not self.interface.is_opened():
+            return
         # Get current stretch of all servo motors and publish them
         joint_names = []
         servo_ids = []
@@ -595,6 +612,8 @@ class RCB4ROSBridge:
         self.stretch_publisher.publish(stretch_msg)
 
     def stretch_callback(self, goal):
+        if not self.interface.is_opened():
+            return
         if len(goal.joint_names) == 0:
             goal.joint_names = self.joint_names
         joint_names = []
@@ -616,6 +635,8 @@ class RCB4ROSBridge:
         return self.stretch_server.set_succeeded(StretchResult())
 
     def publish_pressure(self):
+        if not self.interface.is_opened():
+            return
         for idx in self.air_board_ids:
             try:
                 key = f"{idx}"
@@ -696,6 +717,8 @@ class RCB4ROSBridge:
 
         After 1s, all valves are closed and pump is stopped.
         """
+        if not self.interface.is_opened():
+            return
         try:
             self.interface.stop_pump()
             self.interface.open_work_valve(idx)
@@ -708,6 +731,8 @@ class RCB4ROSBridge:
 
     def start_vacuum(self, idx):
         """Vacuum air in work"""
+        if not self.interface.is_opened():
+            return
         try:
             self.interface.start_pump()
             self.interface.open_work_valve(idx)
@@ -717,6 +742,8 @@ class RCB4ROSBridge:
 
     def stop_vacuum(self, idx):
         """Seal air in work"""
+        if not self.interface.is_opened():
+            return
         try:
             self.interface.close_work_valve(idx)
             self.interface.close_air_connect_valve()
@@ -726,6 +753,8 @@ class RCB4ROSBridge:
             rospy.logerr(f"[stop_vacuum] {e!s}")
 
     def pressure_control_callback(self, goal):
+        if not self.interface.is_opened():
+            return
         if self.pressure_control_thread is not None:
             # Finish existing thread
             self.pressure_control_running = False
@@ -752,6 +781,8 @@ class RCB4ROSBridge:
         return self.pressure_control_server.set_succeeded(PressureControlResult())
 
     def publish_imu_message(self):
+        if not self.interface.is_opened():
+            return
         msg = sensor_msgs.msg.Imu()
         msg.header.frame_id = self.imu_frame_id
         msg.header.stamp = rospy.Time.now()
@@ -772,6 +803,8 @@ class RCB4ROSBridge:
         self.imu_publisher.publish(msg)
 
     def publish_sensor_values(self):
+        if not self.interface.is_opened():
+            return
         stamp = rospy.Time.now()
         msg = geometry_msgs.msg.WrenchStamped()
         msg.header.stamp = stamp
@@ -814,13 +847,16 @@ class RCB4ROSBridge:
             torque_vector = self.interface.servo_error()
         except IndexError as e:
             rospy.logerr(f"[publish_joint_states] {e!s}")
-            return
+            return False
         except ValueError as e:
             rospy.logerr(f"[publish_joint_states] {e!s}")
-            return
+            return False
         except serial.serialutil.SerialException as e:
             rospy.logerr(f"[publish_joint_states] {e!s}")
-            return
+            return False
+        except OSError as e:
+            rospy.logerr(f"[publish_joint_states] {e!s}")
+            return False
         msg = JointState()
         msg.header.stamp = rospy.Time.now()
         for name in self.joint_names:
@@ -833,8 +869,11 @@ class RCB4ROSBridge:
                 msg.effort.append(torque_vector[idx])
                 msg.name.append(name)
         self.current_joint_states_pub.publish(msg)
+        return True
 
     def publish_servo_on_off(self):
+        if not self.interface.is_opened():
+            return
         self.check_servo_states()
         servo_on_off_msg = ServoOnOff()
         servo_on_off_msg.joint_names = list(self.joint_servo_on.keys())
@@ -842,13 +881,55 @@ class RCB4ROSBridge:
             self.joint_servo_on.values())
         self.servo_on_off_pub.publish(servo_on_off_msg)
 
+    def reinitialize_interface(self):
+        self.unsubscribe()
+        self.interface.close()
+        self.interface = self.setup_interface()
+        self.subscribe()
+
+    def check_success_rate(self):
+        # Calculate success rate
+        if self.publish_joint_states_attempts > 0:
+            success_rate = (
+                self.publish_joint_states_successes / self.publish_joint_states_attempts
+            )
+            rospy.loginfo(f"Current communication success rate: {success_rate:.2%}")
+
+            # Check if the success rate is below the threshold
+            if success_rate < self.success_rate_threshold:
+                rospy.logwarn(
+                    f"communication success rate ({success_rate:.2%}) below threshold; "
+                    + "reinitializing interface."
+                )
+                self.reinitialize_interface()
+
+        # Reset counters and timer
+        self.publish_joint_states_successes = 0
+        self.publish_joint_states_attempts = 0
+        self.last_check_time = rospy.Time.now()
+
     def run(self):
         rate = rospy.Rate(
             rospy.get_param(self.clean_namespace + "/control_loop_rate", 20)
         )
 
+        self.publish_joint_states_attempts = 0
+        self.publish_joint_states_successes = 0
+        self.last_check_time = rospy.Time.now()
+        check_interval = rospy.get_param('~check_interval', 3)
+        self.success_rate_threshold = 0.8  # Minimum success rate required
+
         while not rospy.is_shutdown():
-            self.publish_joint_states()
+            success = self.publish_joint_states()
+            self.publish_joint_states_attempts += 1
+            if success:
+                self.publish_joint_states_successes += 1
+
+            # Check success rate periodically
+            current_time = rospy.Time.now()
+            if (current_time - self.last_check_time).to_sec() >= check_interval:
+                self.check_success_rate()
+
             self.publish_servo_on_off()
 
             if self.publish_imu and self.imu_publisher.get_num_connections():
