@@ -630,7 +630,7 @@ class RCB4ROSBridge:
         point = JointTrajectoryPoint()
         point.positions = positions
         point.time_from_start = rospy.Duration(
-            0.01
+            0.5
         )  # Short duration for immediate application
         trajectory_goal.trajectory.points = [point]
         # Initialize action client and wait for server
