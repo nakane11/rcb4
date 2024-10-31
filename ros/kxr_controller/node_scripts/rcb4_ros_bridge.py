@@ -823,7 +823,7 @@ class RCB4ROSBridge:
     def pressure_control_callback(self, goal):
         if not self.interface.is_opened():
             return
-        if self.pressure_control_thread is not None:
+        if hasattr(self, 'pressure_control_thread') and self.pressure_control_thread is not None:
             # Finish existing thread
             self.pressure_control_running = False
             # Wait for the finishing process complete
