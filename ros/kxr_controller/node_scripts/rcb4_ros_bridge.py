@@ -727,7 +727,7 @@ class RCB4ROSBridge:
                 # Avoid 'rospy.exceptions.ROSException:
                 # publish() to a closed topic'
                 rospy.sleep(0.1)
-            pressure = serial_call_with_retry(self.read_pressure_sensor, idx)
+            pressure = serial_call_with_retry(self.interface.read_pressure_sensor, idx)
             if pressure is None:
                 continue
             self._pressure_publisher_dict[key].publish(
