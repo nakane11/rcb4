@@ -606,6 +606,7 @@ class RCB4ROSBridge:
             max_retries=10,
         )
         if ret is None:
+            self._during_servo_off = False
             return self.servo_on_off_server.set_aborted(
                 text="Failed to call servo on off. "
                 + "Control board is switch off or cable is disconnected?"
