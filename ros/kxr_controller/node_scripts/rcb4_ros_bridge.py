@@ -42,6 +42,7 @@ import yaml
 
 from rcb4.armh7interface import ARMH7Interface
 from rcb4.rcb4interface import RCB4Interface
+from rcb4.rcb4interface import ServoOnOffValues
 
 np.set_printoptions(precision=0, suppress=True)
 
@@ -593,9 +594,9 @@ class RCB4ROSBridge:
                 continue
             servo_ids.append(self.joint_name_to_id[joint_name])
             if servo_on:
-                servo_vector.append(32767)
+                servo_vector.append(ServoOnOffValues.ON.value)
             else:
-                servo_vector.append(32768)
+                servo_vector.append(ServoOnOffValues.OFF.value)
 
         self._during_servo_off = True
         ret = serial_call_with_retry(
