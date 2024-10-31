@@ -94,9 +94,7 @@ class EusModelServer:
                     self.robot_model = self.load_robot_model(urdf_content)
                     self.previous_md5sum = md5sum
 
-                self.save_eus_model(
-                    md5sum, urdf_content, joint_group_description
-                )
+                self.save_eus_model(md5sum, urdf_content, joint_group_description)
                 robot_name = self.robot_model.urdf_robot_model.name
 
                 rospy.set_param(self.namespace + "/eus_robot_name", robot_name)

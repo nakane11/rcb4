@@ -109,15 +109,6 @@
    (when (null names)
      (setq names joint-names))
    (let* (goal result)
-     ;; send current angle-vector
-     (while (ros::ok)
-       (send self :angle-vector (send self :state :potentio-vector) 1.0)
-       (send self :wait-interpolation)
-       (setq tmp-result (send-all controller-actions :get-result))
-       (when (every #'identity (send-all controller-actions :get-result))
-         (return))
-       (ros::ros-warn "waiting for the angle vector to be sent."))
-
      (setq goal (instance kxr_controller::ServoOnOffGoal :init))
      (send goal :joint_names names)
      (send goal :servo_on_states (make-array (length names) :initial-element t))

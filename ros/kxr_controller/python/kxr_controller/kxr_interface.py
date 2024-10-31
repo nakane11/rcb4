@@ -82,16 +82,6 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         if client.get_state() == actionlib_msgs.msg.GoalStatus.ACTIVE:
             client.cancel_goal()
             client.wait_for_result(timeout=rospy.Duration(10))
-        av = self.angle_vector()
-        while not rospy.is_shutdown():
-            self.angle_vector(av, 1.0)
-            self.wait_interpolation()
-            if (
-                self.controller_table[self.controller_type][0].get_state()
-                == actionlib_msgs.msg.GoalStatus.SUCCEEDED
-            ):
-                break
-            rospy.logwarn("waiting for the angle vector to be sent.")
         goal.joint_names = joint_names
         goal.servo_on_states = [True] * len(joint_names)
         client.send_goal(goal)

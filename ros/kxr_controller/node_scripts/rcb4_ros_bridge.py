@@ -14,6 +14,7 @@ import actionlib
 from actionlib_msgs.msg import GoalID
 from dynamic_reconfigure.server import Server
 import geometry_msgs.msg
+from trajectory_msgs.msg import JointTrajectoryPoint
 from kxr_controller.cfg import KXRParameteresConfig as Config
 from kxr_controller.msg import AdjustAngleVectorAction
 from kxr_controller.msg import AdjustAngleVectorResult
@@ -26,6 +27,8 @@ from kxr_controller.msg import ServoOnOffResult
 from kxr_controller.msg import Stretch
 from kxr_controller.msg import StretchAction
 from kxr_controller.msg import StretchResult
+from control_msgs.msg import FollowJointTrajectoryAction
+from control_msgs.msg import FollowJointTrajectoryGoal
 import numpy as np
 import rospy
 import sensor_msgs.msg
@@ -140,6 +143,7 @@ def set_robot_description(urdf_path, param_name="robot_description"):
 
 class RCB4ROSBridge:
     def __init__(self):
+        self._during_servo_off = False
         # Set up configuration paths and parameters
         self.setup_paths_and_params()
 
@@ -158,6 +162,13 @@ class RCB4ROSBridge:
         self.setup_publishers_and_servers()
 
         self.subscribe()
+
+        self.traj_action_client = actionlib.SimpleActionClient(
+            self.base_namespace + "/fullbody_controller/follow_joint_trajectory",
+            FollowJointTrajectoryAction,
+        )
+        self.traj_action_client.wait_for_server()
+
         rospy.loginfo("RCB4 ROS Bridge initialization completed.")
 
     def setup_paths_and_params(self):
@@ -244,11 +255,12 @@ class RCB4ROSBridge:
             )
 
         # Action servers for servo control
-        self.setup_action_servers()
+        self.setup_action_servers_and_clients()
         self.srv = Server(Config, self.config_callback)
 
-    def setup_action_servers(self):
+    def setup_action_servers_and_clients(self):
         """Set up action servers for controlling servos and pressure."""
+
         # Servo on/off action server
         self.servo_on_off_server = actionlib.SimpleActionServer(
             self.base_namespace + "/fullbody_controller/servo_on_off_real_interface",
@@ -474,15 +486,15 @@ class RCB4ROSBridge:
         return ids
 
     def set_fullbody_controller(self):
-        fullbody_jointnames = []
+        self.fullbody_jointnames = []
         for jn in self.joint_names:
             if jn not in self.joint_name_to_id:
                 continue
             servo_id = self.joint_name_to_id[jn]
             if servo_id in self.interface.wheel_servo_sorted_ids:
                 continue
-            fullbody_jointnames.append(jn)
-        set_fullbody_controller(fullbody_jointnames)
+            self.fullbody_jointnames.append(jn)
+        set_fullbody_controller(self.fullbody_jointnames)
 
     def set_initial_positions(self):
         initial_positions = {}
@@ -534,7 +546,7 @@ class RCB4ROSBridge:
         return angle_vector[valid_indices], servo_ids[valid_indices]
 
     def velocity_command_joint_state_callback(self, msg):
-        if not self.interface.is_opened():
+        if not self.interface.is_opened() or self._during_servo_off:
             return
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
             msg, velocity_control=True
@@ -555,7 +567,7 @@ class RCB4ROSBridge:
         self._prev_velocity_command = av
 
     def command_joint_state_callback(self, msg):
-        if not self.interface.is_opened():
+        if not self.interface.is_opened() or self._during_servo_off:
             return
         av, servo_ids = self._msg_to_angle_vector_and_servo_ids(
             msg, velocity_control=False
@@ -572,6 +584,12 @@ class RCB4ROSBridge:
                 text="Failed to call servo on off. "
                 + "Control board is switch off or cable is disconnected?"
             )
+
+        # Publish current joint position to follow_joint_trajectory
+        # to prevent sudden movements.
+        self.cancel_motion_pub.publish(GoalID())  # Ensure no active motion
+        rospy.sleep(0.1)  # Slight delay for smooth transition
+
         servo_vector = []
         servo_ids = []
         for joint_name, servo_on in zip(goal.joint_names, goal.servo_on_states):
@@ -583,6 +601,7 @@ class RCB4ROSBridge:
             else:
                 servo_vector.append(32768)
 
+        self._during_servo_off = True
         ret = serial_call_with_retry(
             self.interface.servo_angle_vector,
             servo_ids,
@@ -595,6 +614,32 @@ class RCB4ROSBridge:
                 text="Failed to call servo on off. "
                 + "Control board is switch off or cable is disconnected?"
             )
+
+        av = self.interface.angle_vector()
+        joint_names = []
+        positions = []
+        for joint_name in self.fullbody_jointnames:
+            angle = 0
+            if joint_name in self.joint_name_to_id:
+                servo_id = self.joint_name_to_id[joint_name]
+                idx = self.interface.servo_id_to_index(servo_id)
+                if idx is not None:
+                    angle = np.deg2rad(av[idx])
+            joint_names.append(joint_name)
+            positions.append(angle)
+        # Create JointTrajectoryGoal to set current position on follow_joint_trajectory
+        trajectory_goal = FollowJointTrajectoryGoal()
+        trajectory_goal.trajectory.joint_names = joint_names
+        point = JointTrajectoryPoint()
+        point.positions = positions
+        point.time_from_start = rospy.Duration(
+            0.01
+        )  # Short duration for immediate application
+        trajectory_goal.trajectory.points = [point]
+        # Initialize action client and wait for server
+        self.traj_action_client.send_goal(trajectory_goal)
+        self.traj_action_client.wait_for_result()  # Wait for trajectory to complete
+        self._during_servo_off = False
         return self.servo_on_off_server.set_succeeded(ServoOnOffResult())
 
     def adjust_angle_vector_callback(self, goal):
