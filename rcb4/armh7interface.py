@@ -28,6 +28,7 @@ from rcb4.rcb4interface import CommandTypes
 from rcb4.rcb4interface import deg_to_servovector
 from rcb4.rcb4interface import rcb4_dof
 from rcb4.rcb4interface import RCB4Interface
+from rcb4.rcb4interface import ServoOnOffValues
 from rcb4.rcb4interface import ServoParams
 from rcb4.struct_header import c_vector
 from rcb4.struct_header import DataAddress
@@ -489,7 +490,7 @@ class ARMH7Interface:
             servo_ids = self.search_servo_ids()
         servo_ids = np.array(servo_ids)
         # Ignore free servo
-        servo_ids = servo_ids[self.reference_angle_vector(servo_ids=servo_ids) != 32768]
+        servo_ids = servo_ids[self.reference_angle_vector(servo_ids=servo_ids) != ServoOnOffValues.OFF.value]
         if len(servo_ids) == 0:
             return False
 
@@ -722,13 +723,13 @@ class ARMH7Interface:
     def hold(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
-        servo_vector = [32767] * len(servo_ids)
+        servo_vector = [ServoOnOffValues.ON.value] * len(servo_ids)
         return self.servo_angle_vector(servo_ids, servo_vector, velocity=1000)
 
     def free(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
-        servo_vector = [32768] * len(servo_ids)
+        servo_vector = [ServoOnOffValues.OFF.value] * len(servo_ids)
         return self.servo_angle_vector(servo_ids, servo_vector, velocity=1000)
 
     def neutral(self, servo_ids=None, velocity=1000):
@@ -776,11 +777,11 @@ class ARMH7Interface:
         if len(servo_ids) != len(servo_vector):
             raise ValueError("Length of servo_ids and servo_vector must be the same.")
 
-        # Update servo on/off states based on 32767 and 32768 values in servo_vector
+        # Update servo on/off states based on 32767(Servo ON) and 32768(Servo OFF) values in servo_vector
         for servo_id, angle in zip(servo_ids, servo_vector):
-            if angle == 32767:
+            if angle == ServoOnOffValues.ON.value:
                 self.servo_on_states_dict[servo_id] = True
-            elif angle == 32768:
+            elif angle == ServoOnOffValues.OFF.value:
                 self.servo_on_states_dict[servo_id] = False
 
         # Filter servo IDs based on their on state in servo_on_states_dict
@@ -788,8 +789,8 @@ class ARMH7Interface:
         active_angles = []
         for servo_id, angle in zip(servo_ids, servo_vector):
             if self.servo_on_states_dict.get(servo_id, False) or angle in (
-                32767,
-                32768,
+                ServoOnOffValues.ON.value,
+                ServoOnOffValues.OFF.value,
             ):
                 # Only include active servos
                 active_ids.append(servo_id)
@@ -1392,7 +1393,7 @@ class ARMH7Interface:
         return self._armh7_address
 
     def servo_states(self):
-        servo_on_indices = np.where(self.reference_angle_vector() != 32768)[0]
+        servo_on_indices = np.where(self.reference_angle_vector() != ServoOnOffValues.OFF.value)[0]
         if len(servo_on_indices) > 0:
             servo_on_ids = self.servo_sorted_ids[servo_on_indices]
             # The worm module is always determined to be in the servo-off

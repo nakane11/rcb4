@@ -30,6 +30,10 @@ class CommandTypes(Enum):
     _None = 0xFF
 
 
+class ServoOnOffValues(Enum):
+    ON = 32767
+    OFF = 32768
+
 class ServoParams(Enum):
     Stretch = 0x01
     Speed = 0x02
@@ -429,13 +433,13 @@ class RCB4Interface:
     def hold(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
-        servo_vector = [32767] * len(servo_ids)
+        servo_vector = [ServoOnOffValues.ON.value] * len(servo_ids)
         return self.servo_angle_vector(servo_ids, servo_vector, velocity=127)
 
     def free(self, servo_ids=None):
         if servo_ids is None:
             servo_ids = self.servo_sorted_ids
-        servo_vector = [32768] * len(servo_ids)
+        servo_vector = [ServoOnOffValues.OFF.value] * len(servo_ids)
         return self.servo_angle_vector(servo_ids, servo_vector, velocity=127)
 
     def neutral(self, servo_ids=None, velocity=127):
@@ -479,11 +483,11 @@ class RCB4Interface:
         if len(servo_ids) != len(servo_vector):
             raise ValueError("Length of servo_ids and servo_vector must be the same.")
 
-        # Update servo on/off states based on 32767 and 32768 values in servo_vector
+        # Update servo on/off states based on 32767 (Servo ON) and 32768 (Servo OFF) values in servo_vector
         for servo_id, angle in zip(servo_ids, servo_vector):
-            if angle == 32767:
+            if angle == ServoOnOffValues.ON.value:
                 self.servo_on_states_dict[servo_id] = True
-            elif angle == 32768:
+            elif angle == ServoOnOffValues.OFF.value:
                 self.servo_on_states_dict[servo_id] = False
 
         # Filter servo IDs based on their on state in servo_on_states_dict
@@ -491,8 +495,8 @@ class RCB4Interface:
         active_angles = []
         for servo_id, angle in zip(servo_ids, servo_vector):
             if self.servo_on_states_dict.get(servo_id, False) or angle in (
-                32767,
-                32768,
+                ServoOnOffValues.ON.value,
+                ServoOnOffValues.OFF.value,
             ):
                 # Only include active servos
                 active_ids.append(servo_id)
@@ -643,7 +647,7 @@ class RCB4Interface:
         return self._actuator_to_joint_matrix
 
     def servo_states(self):
-        servo_on_indices = np.where(self.reference_angle_vector() != 32768)[0]
+        servo_on_indices = np.where(self.reference_angle_vector() != ServoOnOffValues.OFF.value)[0]
         if len(servo_on_indices) > 0:
             servo_on_ids = self.servo_sorted_ids[servo_on_indices]
             return servo_on_ids
