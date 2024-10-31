@@ -730,6 +730,7 @@ class RCB4ROSBridge:
             pressure = serial_call_with_retry(self.interface.read_pressure_sensor, idx)
             if pressure is None:
                 continue
+            self.recent_pressures.append(pressure)
             self._pressure_publisher_dict[key].publish(
                 std_msgs.msg.Float32(data=pressure)
             )
@@ -760,17 +761,23 @@ class RCB4ROSBridge:
             return
         vacuum_on = False
         while self.pressure_control_running:
-            if vacuum_on is False and self.average_pressure > start_pressure:
+            pressure = self.average_pressure
+            if pressure is None:
+                rospy.sleep()
+            if vacuum_on is False and pressure > start_pressure:
                 self.start_vacuum(idx)
                 vacuum_on = True
-            if vacuum_on and self.average_pressure <= stop_pressure:
+            if vacuum_on and pressure <= stop_pressure:
                 self.stop_vacuum(idx)
                 vacuum_on = False
             rospy.sleep(0.1)
 
     @property
     def average_pressure(self):
-        return sum(self.recent_pressures) / len(self.recent_pressures)
+        n = len(self.recent_pressures)
+        if n == 0:
+            return None
+        return sum(self.recent_pressures) / n
 
     def release_vacuum(self, idx):
         """Connect work to air.
