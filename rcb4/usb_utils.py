@@ -48,9 +48,7 @@ def reset_usb_device(port):
     vendor_id, product_id = get_vendor_id_and_product_id(port)
     # Create a USB context and open the device by vendor ID and product ID
     context = usb1.USBContext()
-    handle = context.openByVendorIDAndProductID(
-        vendor_id, product_id, skip_on_error=True
-    )
+    handle = context.openByVendorIDAndProductID(vendor_id, product_id, skip_on_error=True)
     if handle is None:
         raise ValueError("Device not found")
     # Reset the USB device

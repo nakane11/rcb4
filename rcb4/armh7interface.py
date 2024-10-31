@@ -491,7 +491,7 @@ class ARMH7Interface:
         # Ignore free servo
         servo_ids = servo_ids[self.reference_angle_vector(servo_ids=servo_ids) != 32768]
         if len(servo_ids) == 0:
-            return
+            return False
 
         # Calculate error threshold[deg]
         if error_threshold is None:
@@ -566,9 +566,7 @@ class ARMH7Interface:
                     dtype=np.float32,
                 )
             self._worm_ref_angle[np.array(worm_indices)] = np.array(worm_av)
-            self.write_cstruct_slot_v(
-                WormmoduleStruct, "ref_angle", self._worm_ref_angle
-            )
+            self.write_cstruct_slot_v(WormmoduleStruct, "ref_angle", self._worm_ref_angle)
         svs = self.angle_vector_to_servo_angle_vector(av, servo_ids)
         return self.servo_angle_vector(servo_ids, svs, velocity=velocity)
 
@@ -633,7 +631,7 @@ class ARMH7Interface:
             return
         current_trim_vector = self._trim_servo_vector()
         current_trim_vector[np.array(servo_ids)] = trim_vector
-        self.write_cstruct_slot_v(ServoStruct, "trim", current_trim_vector)
+        return self.write_cstruct_slot_v(ServoStruct, "trim", current_trim_vector)
 
     def trim_vector(self, av=None, servo_ids=None):
         if av is not None:
@@ -656,14 +654,10 @@ class ARMH7Interface:
             self.write_to_flash()
 
     def ics_start(self):
-        return self.set_cstruct_slot(
-            SystemStruct, 0, "ics_comm_stop", [0, 0, 0, 0, 0, 0]
-        )
+        return self.set_cstruct_slot(SystemStruct, 0, "ics_comm_stop", [0, 0, 0, 0, 0, 0])
 
     def ics_stop(self):
-        return self.set_cstruct_slot(
-            SystemStruct, 0, "ics_comm_stop", [1, 1, 1, 1, 1, 1]
-        )
+        return self.set_cstruct_slot(SystemStruct, 0, "ics_comm_stop", [1, 1, 1, 1, 1, 1])
 
     def idmode_scan(self):
         self.ics_stop()
@@ -703,6 +697,13 @@ class ARMH7Interface:
             self._servo_id_to_sequentialized_servo_id[servo_indices] = np.arange(
                 len(servo_indices)
             )
+        servo_on_states = self.servo_states()
+        self.servo_on_states_dict = {}
+        for index in servo_indices:
+            if index in servo_on_states:
+                self.servo_on_states_dict[index] = True
+            else:
+                self.servo_on_states_dict[index] = False
         return servo_indices
 
     def search_air_board_ids(self):
@@ -716,9 +717,7 @@ class ARMH7Interface:
         return np.array(air_board_ids)
 
     def valid_servo_ids(self, servo_ids):
-        return np.isfinite(
-            self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)]
-        )
+        return np.isfinite(self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)])
 
     def hold(self, servo_ids=None):
         if servo_ids is None:
@@ -777,10 +776,34 @@ class ARMH7Interface:
         if len(servo_ids) != len(servo_vector):
             raise ValueError("Length of servo_ids and servo_vector must be the same.")
 
+        # Update servo on/off states based on 32767 and 32768 values in servo_vector
+        for servo_id, angle in zip(servo_ids, servo_vector):
+            if angle == 32767:
+                self.servo_on_states_dict[servo_id] = True
+            elif angle == 32768:
+                self.servo_on_states_dict[servo_id] = False
+
+        # Filter servo IDs based on their on state in servo_on_states_dict
+        active_ids = []
+        active_angles = []
+        for servo_id, angle in zip(servo_ids, servo_vector):
+            if self.servo_on_states_dict.get(servo_id, False) or angle in (
+                32767,
+                32768,
+            ):
+                # Only include active servos
+                active_ids.append(servo_id)
+                active_angles.append(angle)
+
+        # If no active servos, skip command sending
+        if not active_ids:
+            # print("[servo_angle_vector] No active servos to send commands.")
+            return
+
         # Sort the servo vectors based on servo IDs
-        sorted_indices = np.argsort(servo_ids)
-        sorted_servo_ids = np.array(servo_ids)[sorted_indices]
-        sorted_servo_vector = np.array(servo_vector)[sorted_indices]
+        sorted_indices = np.argsort(active_ids)
+        sorted_servo_ids = np.array(active_ids)[sorted_indices]
+        sorted_servo_vector = np.array(active_angles)[sorted_indices]
 
         # Prepare the command byte list
         if (
@@ -1045,9 +1068,7 @@ class ARMH7Interface:
 
         # Write the parameters to the wormmodule vector cstruct
         if module_type is not None:
-            self.write_cls_alist(
-                WormmoduleStruct, worm_idx, "module_type", [module_type]
-            )
+            self.write_cls_alist(WormmoduleStruct, worm_idx, "module_type", [module_type])
         if servo_idx is not None:
             self.write_cls_alist(WormmoduleStruct, worm_idx, "servo_id", [servo_idx])
         if sensor_idx is not None:
@@ -1267,19 +1288,19 @@ class ARMH7Interface:
 
     def start_pump(self):
         """Drive pump. There is supposed to be one pump for the entire system."""
-        self.cfunc_call("pump_switch", True)
+        return self.cfunc_call("pump_switch", True)
 
     def stop_pump(self):
         """Stop driving pump. There should be one pump for the entire system."""
-        self.cfunc_call("pump_switch", False)
+        return self.cfunc_call("pump_switch", False)
 
     def open_air_connect_valve(self):
         """Open valve to release air to atmosphere"""
-        self.cfunc_call("valve_switch", True)
+        return self.cfunc_call("valve_switch", True)
 
     def close_air_connect_valve(self):
         """Close valve to shut off air from atmosphere"""
-        self.cfunc_call("valve_switch", False)
+        return self.cfunc_call("valve_switch", False)
 
     def gpio_mode(self, board_idx):
         """Return current GPIO mode of air relay board
@@ -1297,7 +1318,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode | 0b00000001
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def close_work_valve(self, board_idx):
         """Close work valve
@@ -1306,7 +1327,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode & 0b11111110
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def open_relay_valve(self, board_idx):
         """Open valve to relay air to next work
@@ -1315,7 +1336,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode | 0b00000010
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def close_relay_valve(self, board_idx):
         """Close valve to relay air to next work
@@ -1324,7 +1345,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode & 0b11111101
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     @property
     def servo_id_to_worm_id(self):
@@ -1351,9 +1372,7 @@ class ARMH7Interface:
     @property
     def actuator_to_joint_matrix(self):
         if self._actuator_to_joint_matrix is None:
-            self._actuator_to_joint_matrix = np.linalg.inv(
-                self.joint_to_actuator_matrix
-            )
+            self._actuator_to_joint_matrix = np.linalg.inv(self.joint_to_actuator_matrix)
         return self._actuator_to_joint_matrix
 
     @property

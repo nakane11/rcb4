@@ -1,4 +1,3 @@
-from __future__ import print_function
 
 import shlex
 import subprocess
@@ -7,18 +6,17 @@ import sys
 from setuptools import find_packages
 from setuptools import setup
 
-
 version = "0.0.1"
 
 
 if sys.argv[-1] == "release":
     # Release via github-actions.
     commands = [
-        "git tag v{:s}".format(version),
+        f"git tag v{version:s}",
         "git push origin master --tag",
     ]
     for cmd in commands:
-        print("+ {}".format(cmd))
+        print(f"+ {cmd}")
         subprocess.check_call(shlex.split(cmd))
     sys.exit(0)
 

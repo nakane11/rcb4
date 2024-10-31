@@ -1,13 +1,13 @@
 from collections import namedtuple
+from distutils.version import StrictVersion
 import os
 import os.path as osp
 import subprocess
-from distutils.version import StrictVersion
 
-import pkg_resources
 from colorama import Fore
 from colorama import Style
 import gdown
+import pkg_resources
 
 data_dir = osp.abspath(osp.dirname(__file__))
 _default_cache_dir = osp.expanduser("~/.rcb4")

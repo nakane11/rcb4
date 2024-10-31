@@ -82,16 +82,6 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         if client.get_state() == actionlib_msgs.msg.GoalStatus.ACTIVE:
             client.cancel_goal()
             client.wait_for_result(timeout=rospy.Duration(10))
-        av = self.angle_vector()
-        while not rospy.is_shutdown():
-            self.angle_vector(av, 1.0)
-            self.wait_interpolation()
-            if (
-                self.controller_table[self.controller_type][0].get_state()
-                == actionlib_msgs.msg.GoalStatus.SUCCEEDED
-            ):
-                break
-            rospy.logwarn("waiting for the angle vector to be sent.")
         goal.joint_names = joint_names
         goal.servo_on_states = [True] * len(joint_names)
         client.send_goal(goal)
@@ -113,9 +103,7 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
 
     def adjust_angle_vector(self, joint_names=None, error_threshold=None):
         if self.use_sim_time:
-            rospy.logwarn(
-                "In simulation mode, adjust angle vector function is disabled."
-            )
+            rospy.logwarn("In simulation mode, adjust angle vector function is disabled.")
             return
         if error_threshold is None:
             error_threshold = np.deg2rad(5)
