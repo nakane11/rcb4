@@ -766,11 +766,9 @@ class RCB4ROSBridge:
             if pressure is None:
                 rospy.sleep()
             if vacuum_on is False and pressure > start_pressure:
-                self.start_vacuum(idx)
-                vacuum_on = True
+                vacuum_on = self.start_vacuum(idx)
             if vacuum_on and pressure <= stop_pressure:
-                self.stop_vacuum(idx)
-                vacuum_on = False
+                vacuum_on = not self.stop_vacuum(idx)
             rospy.sleep(0.1)
 
     @property
@@ -786,39 +784,60 @@ class RCB4ROSBridge:
         After 1s, all valves are closed and pump is stopped.
         """
         if not self.interface.is_opened():
-            return
-        try:
-            self.interface.stop_pump()
-            self.interface.open_work_valve(idx)
-            self.interface.open_air_connect_valve()
-            rospy.sleep(1)  # Wait until air is completely released
-            self.interface.close_air_connect_valve()
-            self.interface.close_work_valve(idx)
-        except serial.serialutil.SerialException as e:
-            rospy.logerr(f"[release_vacuum] {e!s}")
+            return False
+        ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.open_air_connect_valve,
+                                     max_retries=3)
+        if ret is None:
+            return False
+        rospy.sleep(1)  # Wait until air is completely released
+        ret = serial_call_with_retry(self.interface.close_air_connect_valve,
+                                     max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.close_work_valve,
+                                     idx, max_retries=3)
+        if ret is None:
+            return False
+        return True
 
     def start_vacuum(self, idx):
         """Vacuum air in work"""
         if not self.interface.is_opened():
-            return
-        try:
-            self.interface.start_pump()
-            self.interface.open_work_valve(idx)
-            self.interface.close_air_connect_valve()
-        except serial.serialutil.SerialException as e:
-            rospy.logerr(f"[start_vacuum] {e!s}")
+            return False
+
+        ret = serial_call_with_retry(self.interface.start_pump, max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
+        if ret is None:
+            return False
+        return True
 
     def stop_vacuum(self, idx):
         """Seal air in work"""
         if not self.interface.is_opened():
-            return
-        try:
-            self.interface.close_work_valve(idx)
-            self.interface.close_air_connect_valve()
-            rospy.sleep(0.3)  # Wait for valve to close completely
-            self.interface.stop_pump()
-        except serial.serialutil.SerialException as e:
-            rospy.logerr(f"[stop_vacuum] {e!s}")
+            return False
+
+        ret = serial_call_with_retry(self.interface.close_work_valve, idx, max_retries=3)
+        if ret is None:
+            return False
+        ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
+        if ret is None:
+            return False
+        rospy.sleep(0.3)  # Wait for valve to close completely
+        ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
+        if ret is None:
+            return False
+        return True
 
     def pressure_control_callback(self, goal):
         if not self.interface.is_opened():

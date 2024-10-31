@@ -1288,19 +1288,19 @@ class ARMH7Interface:
 
     def start_pump(self):
         """Drive pump. There is supposed to be one pump for the entire system."""
-        self.cfunc_call("pump_switch", True)
+        return self.cfunc_call("pump_switch", True)
 
     def stop_pump(self):
         """Stop driving pump. There should be one pump for the entire system."""
-        self.cfunc_call("pump_switch", False)
+        return self.cfunc_call("pump_switch", False)
 
     def open_air_connect_valve(self):
         """Open valve to release air to atmosphere"""
-        self.cfunc_call("valve_switch", True)
+        return self.cfunc_call("valve_switch", True)
 
     def close_air_connect_valve(self):
         """Close valve to shut off air from atmosphere"""
-        self.cfunc_call("valve_switch", False)
+        return self.cfunc_call("valve_switch", False)
 
     def gpio_mode(self, board_idx):
         """Return current GPIO mode of air relay board
@@ -1318,7 +1318,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode | 0b00000001
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def close_work_valve(self, board_idx):
         """Close work valve
@@ -1327,7 +1327,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode & 0b11111110
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def open_relay_valve(self, board_idx):
         """Open valve to relay air to next work
@@ -1336,7 +1336,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode | 0b00000010
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     def close_relay_valve(self, board_idx):
         """Close valve to relay air to next work
@@ -1345,7 +1345,7 @@ class ARMH7Interface:
         """
         gpio_mode = self.gpio_mode(board_idx)
         command = gpio_mode & 0b11111101
-        self.cfunc_call("gpio_cmd", board_idx, command)
+        return self.cfunc_call("gpio_cmd", board_idx, command)
 
     @property
     def servo_id_to_worm_id(self):
