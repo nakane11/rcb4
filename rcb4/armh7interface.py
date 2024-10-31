@@ -491,7 +491,7 @@ class ARMH7Interface:
         # Ignore free servo
         servo_ids = servo_ids[self.reference_angle_vector(servo_ids=servo_ids) != 32768]
         if len(servo_ids) == 0:
-            return
+            return False
 
         # Calculate error threshold[deg]
         if error_threshold is None:
@@ -633,7 +633,7 @@ class ARMH7Interface:
             return
         current_trim_vector = self._trim_servo_vector()
         current_trim_vector[np.array(servo_ids)] = trim_vector
-        self.write_cstruct_slot_v(ServoStruct, "trim", current_trim_vector)
+        return self.write_cstruct_slot_v(ServoStruct, "trim", current_trim_vector)
 
     def trim_vector(self, av=None, servo_ids=None):
         if av is not None:
@@ -795,7 +795,10 @@ class ARMH7Interface:
         active_ids = []
         active_angles = []
         for servo_id, angle in zip(servo_ids, servo_vector):
-            if self.servo_on_states_dict.get(servo_id, False) or angle in (32767, 32768):
+            if self.servo_on_states_dict.get(servo_id, False) or angle in (
+                32767,
+                32768,
+            ):
                 # Only include active servos
                 active_ids.append(servo_id)
                 active_angles.append(angle)

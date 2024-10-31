@@ -33,7 +33,13 @@ def serial_call_with_retry(func, *args, max_retries=1, retry_interval=0.1, **kwa
     while attempts < max_retries:
         try:
             return func(*args, **kwargs)
-        except (serial.SerialException, OSError, ValueError, IndexError) as e:
+        except (
+            serial.SerialException,
+            OSError,
+            ValueError,
+            IndexError,
+            RuntimeError,
+        ) as e:
             rospy.logerr(f"[{func.__name__}] Error: {e}")
             attempts += 1
             rospy.sleep(retry_interval)
