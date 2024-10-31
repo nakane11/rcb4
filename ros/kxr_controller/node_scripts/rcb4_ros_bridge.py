@@ -513,7 +513,7 @@ class RCB4ROSBridge:
         return True
 
     def _valid_joint(self, joint_name):
-        return joint_name not in self.joint_name_to_id or (
+        return joint_name in self.joint_name_to_id and (
             self.joint_name_to_id[joint_name] in self.interface.servo_on_states_dict
             and self.interface.servo_on_states_dict[self.joint_name_to_id[joint_name]]
         )
