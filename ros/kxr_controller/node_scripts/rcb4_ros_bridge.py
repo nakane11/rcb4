@@ -161,13 +161,6 @@ class RCB4ROSBridge:
         self.setup_publishers_and_servers()
 
         self.subscribe()
-
-        self.traj_action_client = actionlib.SimpleActionClient(
-            self.base_namespace + "/fullbody_controller/follow_joint_trajectory",
-            FollowJointTrajectoryAction,
-        )
-        self.traj_action_client.wait_for_server()
-
         rospy.loginfo("RCB4 ROS Bridge initialization completed.")
 
     def setup_paths_and_params(self):
@@ -270,6 +263,12 @@ class RCB4ROSBridge:
         # Avoid 'rospy.exceptions.ROSException: publish() to a closed topic'
         rospy.sleep(0.1)
         self.servo_on_off_server.start()
+
+        self.traj_action_client = actionlib.SimpleActionClient(
+            self.base_namespace + "/fullbody_controller/follow_joint_trajectory",
+            FollowJointTrajectoryAction,
+        )
+        self.traj_action_client.wait_for_server()
 
         # Adjust angle vector action server
         self.adjust_angle_vector_server = actionlib.SimpleActionServer(
