@@ -103,9 +103,7 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
 
     def adjust_angle_vector(self, joint_names=None, error_threshold=None):
         if self.use_sim_time:
-            rospy.logwarn(
-                "In simulation mode, adjust angle vector function is disabled."
-            )
+            rospy.logwarn("In simulation mode, adjust angle vector function is disabled.")
             return
         if error_threshold is None:
             error_threshold = np.deg2rad(5)

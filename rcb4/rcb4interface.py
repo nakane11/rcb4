@@ -424,9 +424,7 @@ class RCB4Interface:
         return servo_indices
 
     def valid_servo_ids(self, servo_ids):
-        return np.isfinite(
-            self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)]
-        )
+        return np.isfinite(self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)])
 
     def hold(self, servo_ids=None):
         if servo_ids is None:
@@ -641,9 +639,7 @@ class RCB4Interface:
     @property
     def actuator_to_joint_matrix(self):
         if self._actuator_to_joint_matrix is None:
-            self._actuator_to_joint_matrix = np.linalg.inv(
-                self.joint_to_actuator_matrix
-            )
+            self._actuator_to_joint_matrix = np.linalg.inv(self.joint_to_actuator_matrix)
         return self._actuator_to_joint_matrix
 
     def servo_states(self):

@@ -19,7 +19,5 @@ if __name__ == "__main__":
         rate = rospy.Rate(rospy.get_param("~rate", 20))
         while not rospy.is_shutdown():
             br = tf.TransformBroadcaster()
-            br.sendTransform(
-                (0, 0, 0), (0, 0, 0, 1), rospy.Time.now(), root_link, "map"
-            )
+            br.sendTransform((0, 0, 0), (0, 0, 0, 1), rospy.Time.now(), root_link, "map")
             rate.sleep()

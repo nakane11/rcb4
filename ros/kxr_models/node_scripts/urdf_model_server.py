@@ -3,6 +3,7 @@
 import os
 import tempfile
 import xml.etree.ElementTree as ET
+
 from filelock import FileLock
 from kxr_models.md5sum_utils import checksum_md5
 from kxr_models.urdf import aggregate_urdf_mesh_files

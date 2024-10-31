@@ -566,9 +566,7 @@ class ARMH7Interface:
                     dtype=np.float32,
                 )
             self._worm_ref_angle[np.array(worm_indices)] = np.array(worm_av)
-            self.write_cstruct_slot_v(
-                WormmoduleStruct, "ref_angle", self._worm_ref_angle
-            )
+            self.write_cstruct_slot_v(WormmoduleStruct, "ref_angle", self._worm_ref_angle)
         svs = self.angle_vector_to_servo_angle_vector(av, servo_ids)
         return self.servo_angle_vector(servo_ids, svs, velocity=velocity)
 
@@ -656,14 +654,10 @@ class ARMH7Interface:
             self.write_to_flash()
 
     def ics_start(self):
-        return self.set_cstruct_slot(
-            SystemStruct, 0, "ics_comm_stop", [0, 0, 0, 0, 0, 0]
-        )
+        return self.set_cstruct_slot(SystemStruct, 0, "ics_comm_stop", [0, 0, 0, 0, 0, 0])
 
     def ics_stop(self):
-        return self.set_cstruct_slot(
-            SystemStruct, 0, "ics_comm_stop", [1, 1, 1, 1, 1, 1]
-        )
+        return self.set_cstruct_slot(SystemStruct, 0, "ics_comm_stop", [1, 1, 1, 1, 1, 1])
 
     def idmode_scan(self):
         self.ics_stop()
@@ -723,9 +717,7 @@ class ARMH7Interface:
         return np.array(air_board_ids)
 
     def valid_servo_ids(self, servo_ids):
-        return np.isfinite(
-            self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)]
-        )
+        return np.isfinite(self._servo_id_to_sequentialized_servo_id[np.array(servo_ids)])
 
     def hold(self, servo_ids=None):
         if servo_ids is None:
@@ -1076,9 +1068,7 @@ class ARMH7Interface:
 
         # Write the parameters to the wormmodule vector cstruct
         if module_type is not None:
-            self.write_cls_alist(
-                WormmoduleStruct, worm_idx, "module_type", [module_type]
-            )
+            self.write_cls_alist(WormmoduleStruct, worm_idx, "module_type", [module_type])
         if servo_idx is not None:
             self.write_cls_alist(WormmoduleStruct, worm_idx, "servo_id", [servo_idx])
         if sensor_idx is not None:
@@ -1382,9 +1372,7 @@ class ARMH7Interface:
     @property
     def actuator_to_joint_matrix(self):
         if self._actuator_to_joint_matrix is None:
-            self._actuator_to_joint_matrix = np.linalg.inv(
-                self.joint_to_actuator_matrix
-            )
+            self._actuator_to_joint_matrix = np.linalg.inv(self.joint_to_actuator_matrix)
         return self._actuator_to_joint_matrix
 
     @property

@@ -12,9 +12,10 @@ import xml.etree.ElementTree as ET
 
 import actionlib
 from actionlib_msgs.msg import GoalID
+from control_msgs.msg import FollowJointTrajectoryAction
+from control_msgs.msg import FollowJointTrajectoryGoal
 from dynamic_reconfigure.server import Server
 import geometry_msgs.msg
-from trajectory_msgs.msg import JointTrajectoryPoint
 from kxr_controller.cfg import KXRParameteresConfig as Config
 from kxr_controller.msg import AdjustAngleVectorAction
 from kxr_controller.msg import AdjustAngleVectorResult
@@ -27,8 +28,7 @@ from kxr_controller.msg import ServoOnOffResult
 from kxr_controller.msg import Stretch
 from kxr_controller.msg import StretchAction
 from kxr_controller.msg import StretchResult
-from control_msgs.msg import FollowJointTrajectoryAction
-from control_msgs.msg import FollowJointTrajectoryGoal
+from kxr_controller.serial import serial_call_with_retry
 import numpy as np
 import rospy
 import sensor_msgs.msg
@@ -37,12 +37,11 @@ import serial
 from skrobot.model import RobotModel
 from skrobot.utils.urdf import no_mesh_load_mode
 import std_msgs.msg
+from trajectory_msgs.msg import JointTrajectoryPoint
 import yaml
 
 from rcb4.armh7interface import ARMH7Interface
 from rcb4.rcb4interface import RCB4Interface
-
-from kxr_controller.serial import serial_call_with_retry
 
 np.set_printoptions(precision=0, suppress=True)
 
@@ -559,9 +558,7 @@ class RCB4ROSBridge:
             self._prev_velocity_command, av
         ):
             return
-        ret = self.interface.angle_vector(
-            av, servo_ids, velocity=self.wheel_frame_count
-        )
+        ret = self.interface.angle_vector(av, servo_ids, velocity=self.wheel_frame_count)
         if ret is None:
             return
         self._prev_velocity_command = av
@@ -724,9 +721,7 @@ class RCB4ROSBridge:
                     queue_size=1,
                 )
                 self._avg_pressure_publisher_dict[key] = rospy.Publisher(
-                    self.base_namespace
-                    + "/fullbody_controller/average_pressure/"
-                    + key,
+                    self.base_namespace + "/fullbody_controller/average_pressure/" + key,
                     std_msgs.msg.Float32,
                     queue_size=1,
                 )
@@ -909,9 +904,7 @@ class RCB4ROSBridge:
         battery_voltage = serial_call_with_retry(self.interface.battery_voltage)
         if battery_voltage is None:
             return
-        self.battery_voltage_publisher.publish(
-            std_msgs.msg.Float32(data=battery_voltage)
-        )
+        self.battery_voltage_publisher.publish(std_msgs.msg.Float32(data=battery_voltage))
 
     def publish_joint_states(self):
         av = serial_call_with_retry(self.interface.angle_vector)
@@ -979,9 +972,7 @@ class RCB4ROSBridge:
         self.last_check_time = rospy.Time.now()
 
     def run(self):
-        rate = rospy.Rate(
-            rospy.get_param(self.base_namespace + "/control_loop_rate", 20)
-        )
+        rate = rospy.Rate(rospy.get_param(self.base_namespace + "/control_loop_rate", 20))
 
         self.publish_joint_states_attempts = 0
         self.publish_joint_states_successes = 0

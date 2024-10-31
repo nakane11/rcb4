@@ -71,9 +71,7 @@ if __name__ == "__main__":
     namespace = get_namespace()
     rospy.set_param(namespace + "/model_server_ip", get_local_ip())
     port = rospy.get_param(namespace + "/model_server_port", 8123)
-    server = ThreadedHTTPServer(
-        "0.0.0.0", port, CustomHTTPRequestHandler, www_directory
-    )
+    server = ThreadedHTTPServer("0.0.0.0", port, CustomHTTPRequestHandler, www_directory)
     server.start()
 
     rospy.spin()
