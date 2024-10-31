@@ -413,6 +413,14 @@ class RCB4Interface:
             self._servo_id_to_sequentialized_servo_id[servo_indices] = np.arange(
                 len(servo_indices)
             )
+
+        servo_on_states = self.servo_states()
+        self.servo_on_states_dict = {}
+        for index in servo_indices:
+            if index in servo_on_states:
+                self.servo_on_states_dict[index] = True
+            else:
+                self.servo_on_states_dict[index] = False
         return servo_indices
 
     def valid_servo_ids(self, servo_ids):
@@ -473,10 +481,34 @@ class RCB4Interface:
         if len(servo_ids) != len(servo_vector):
             raise ValueError("Length of servo_ids and servo_vector must be the same.")
 
+        # Update servo on/off states based on 32767 and 32768 values in servo_vector
+        for servo_id, angle in zip(servo_ids, servo_vector):
+            if angle == 32767:
+                self.servo_on_states_dict[servo_id] = True
+            elif angle == 32768:
+                self.servo_on_states_dict[servo_id] = False
+
+        # Filter servo IDs based on their on state in servo_on_states_dict
+        active_ids = []
+        active_angles = []
+        for servo_id, angle in zip(servo_ids, servo_vector):
+            if self.servo_on_states_dict.get(servo_id, False) or angle in (
+                32767,
+                32768,
+            ):
+                # Only include active servos
+                active_ids.append(servo_id)
+                active_angles.append(angle)
+
+        # If no active servos, skip command sending
+        if not active_ids:
+            # print("[servo_angle_vector] No active servos to send commands.")
+            return
+
         # Sort the servo vectors based on servo IDs
-        sorted_indices = np.argsort(servo_ids)
-        sorted_servo_ids = np.array(servo_ids)[sorted_indices]
-        sorted_servo_vector = np.array(servo_vector)[sorted_indices]
+        sorted_indices = np.argsort(active_ids)
+        sorted_servo_ids = np.array(active_ids)[sorted_indices]
+        sorted_servo_vector = np.array(active_angles)[sorted_indices]
 
         # Prepare the command byte list
         if (
