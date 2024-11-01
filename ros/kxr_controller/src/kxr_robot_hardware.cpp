@@ -82,14 +82,6 @@ namespace kxr_controller {
     joint_state_sub_ = nh_.subscribe<sensor_msgs::JointState>(clean_namespace + "/current_joint_states", 1, &KXRRobotHW::jointStateCallback, this);
     joint_command_pub_ = nh_.advertise<sensor_msgs::JointState>(clean_namespace + "/command_joint_state", 1);
     joint_velocity_command_pub_ = nh_.advertise<sensor_msgs::JointState>(clean_namespace + "/velocity_command_joint_state", 1);
-
-    ROS_INFO("Waiting for action server to start.");
-    servo_on_off_action_server_ = std::make_shared<ServoOnOffActionServer>(robot_hw_nh, clean_namespace + "/fullbody_controller/servo_on_off",
-                                                                           boost::bind(&KXRRobotHW::execute_servo_on_off_callback, this, _1), false);
-    servo_on_off_action_client_ = std::make_shared<ServoOnOffClient>(clean_namespace + "/fullbody_controller/servo_on_off_real_interface", true);
-    servo_on_off_action_client_->waitForServer();
-    servo_on_off_action_server_->start();
-    ROS_INFO("Action server started, client can send goal.");
     return true;
   }
 
@@ -146,14 +138,6 @@ namespace kxr_controller {
   {
     current_joint_state_ = *msg;
     joint_state_received_ = true;
-  }
-
-  void KXRRobotHW::execute_servo_on_off_callback(const kxr_controller::ServoOnOffGoalConstPtr &goal)
-  {
-    boost::mutex::scoped_lock lock(mutex_);
-    servo_on_off_action_client_->sendGoal(*goal);
-    kxr_controller::ServoOnOffResult result;
-    servo_on_off_action_server_->setSucceeded(result);
   }
 
 }  // namespace kxr_controller
