@@ -85,6 +85,8 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         goal.joint_names = joint_names
         goal.servo_on_states = [True] * len(joint_names)
         client.send_goal(goal)
+        client.wait_for_result(timeout=rospy.Duration(10))
+        return client
 
     def servo_off(self, joint_names=None):
         if self.use_sim_time:
@@ -100,6 +102,8 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         goal.joint_names = joint_names
         goal.servo_on_states = [False] * len(joint_names)
         client.send_goal(goal)
+        client.wait_for_result(timeout=rospy.Duration(10))
+        return client
 
     def adjust_angle_vector(self, joint_names=None, error_threshold=None):
         if self.use_sim_time:
