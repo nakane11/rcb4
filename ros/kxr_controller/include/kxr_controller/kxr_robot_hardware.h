@@ -6,12 +6,9 @@
 #include <controller_manager/controller_manager.h>
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/server/simple_action_server.h>
-#include <kxr_controller/ServoOnOffAction.h>
 
 
 namespace kxr_controller {
-  typedef actionlib::SimpleActionClient<kxr_controller::ServoOnOffAction> ServoOnOffClient;
-  typedef actionlib::SimpleActionServer<kxr_controller::ServoOnOffAction> ServoOnOffActionServer;
 
   class KXRRobotHW : public hardware_interface::RobotHW
   {
@@ -29,9 +26,6 @@ namespace kxr_controller {
     ros::NodeHandle nh_;
 
   private:
-    std::shared_ptr<ServoOnOffActionServer> servo_on_off_action_server_;
-    std::shared_ptr<ServoOnOffClient> servo_on_off_action_client_;
-
     hardware_interface::JointStateInterface joint_state_interface;
     hardware_interface::PositionJointInterface joint_position_interface;
     hardware_interface::VelocityJointInterface joint_velocity_interface;
@@ -54,7 +48,6 @@ namespace kxr_controller {
     std::vector<double> joint_state_velocity_;
     std::vector<double> joint_state_effort_;
     void jointStateCallback(const sensor_msgs::JointState::ConstPtr& msg);
-    void execute_servo_on_off_callback(const kxr_controller::ServoOnOffGoalConstPtr &goal);
     boost::mutex mutex_;
   };
 }  // end of namespace kxr_controller

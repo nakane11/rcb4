@@ -24,8 +24,6 @@
           timeout_2: 30
           topic_3: fullbody_controller/servo_on_off_real_interface/status
           timeout_3: 30
-          topic_4: fullbody_controller/servo_on_off/status
-          timeout_4: 30
         </rosparam>
     </test>
 
@@ -57,8 +55,6 @@
         timeout_2: 30
         topic_3: fullbody_controller/servo_on_off_real_interface/status
         timeout_3: 30
-        topic_4: fullbody_controller/servo_on_off/status
-        timeout_4: 30
       </rosparam>
     </test>
 

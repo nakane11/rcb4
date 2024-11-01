@@ -68,8 +68,8 @@
                 args)
 
    (setq servo-on-off-client (instance ros::simple-action-client :init
-                                       (if namespace (format nil "/~A/~A/servo_on_off" namespace controller-name)
-                                           (format nil "/~A/servo_on_off" controller-name))
+                                       (if namespace (format nil "/~A/~A/servo_on_off_real_interface" namespace controller-name)
+                                           (format nil "/~A/servo_on_off_real_interface" controller-name))
                                        kxr_controller::ServoOnOffAction
                                        :groupname groupname))
    (setq stretch-client (instance ros::simple-action-client :init
