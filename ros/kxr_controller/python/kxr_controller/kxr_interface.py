@@ -36,7 +36,8 @@ class KXRROSRobotInterface(ROSRobotInterfaceBase):
         # Servo on off client
         if self.use_sim_time is False:
             self.servo_on_off_client = actionlib.SimpleActionClient(
-                namespace + "/fullbody_controller/servo_on_off", ServoOnOffAction
+                namespace + "/fullbody_controller/servo_on_off_real_interface",
+                ServoOnOffAction
             )
             self.servo_on_off_client.wait_for_server()
             # Stretch client
