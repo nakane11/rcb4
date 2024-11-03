@@ -91,6 +91,7 @@ def make_urdf_file(joint_name_to_id):
         joint = ET.SubElement(robot, "joint", name=joint_name, type="continuous")
         ET.SubElement(joint, "parent", link=previous_link_name)
         ET.SubElement(joint, "child", link=link_name)
+        ET.SubElement(joint, "limit", velocity="7.47998", effort="0.656248")
 
         previous_link_name = link_name
 
@@ -154,17 +155,28 @@ class RCB4ROSBridge:
 
         # Set up URDF and Robot Model
         self.robot_model, self.joint_names = self.setup_urdf_and_model()
-
         while not rospy.is_shutdown():
             ret = self.setup_interface_and_servo_parameters()
             if ret is True:
                 break
-
         # Set up ROS parameters and controllers
         self.setup_ros_parameters()
         self.run_ros_robot_controllers()
 
         self.setup_publishers_and_servers()
+        self.control_positive_pressure = rospy.get_param('~control_positive_pressure', True)
+        self.air_board_ids = self.interface.search_air_board_ids() \
+                                                   .tolist()
+        self._scaled_pressure_publisher_dict = {}
+        self.recent_pressures = {}
+        self.min_pressures = {}
+        self.max_pressures = {}
+        for idx in self.air_board_ids:
+            self.calibrate_sensor(idx)
+        self.refill_lower_threshold = -2.8
+        self.refill_upper_threshold = 1.2
+        rospy.loginfo("servo id: {}".format(self.interface.search_servo_ids()))
+        rospy.loginfo("air board id: {}".format(self.air_board_ids))
 
         self.subscribe()
         rospy.loginfo("RCB4 ROS Bridge initialization completed.")
@@ -731,163 +743,313 @@ class RCB4ROSBridge:
         rospy.loginfo(f"Update {joint_names} stretch to {stretch}")
         return self.stretch_server.set_succeeded(StretchResult())
 
+    # def publish_pressure(self):
+    #     if not self.interface.is_opened():
+    #         return
+    #     for idx in self.air_board_ids:
+    #         key = f"{idx}"
+    #         if key not in self._pressure_publisher_dict:
+    #             self._pressure_publisher_dict[key] = rospy.Publisher(
+    #                 self.base_namespace + "/fullbody_controller/pressure/" + key,
+    #                 std_msgs.msg.Float32,
+    #                 queue_size=1,
+    #             )
+    #             self._avg_pressure_publisher_dict[key] = rospy.Publisher(
+    #                 self.base_namespace + "/fullbody_controller/average_pressure/" + key,
+    #                 std_msgs.msg.Float32,
+    #                 queue_size=1,
+    #             )
+    #             # Avoid 'rospy.exceptions.ROSException:
+    #             # publish() to a closed topic'
+    #             rospy.sleep(0.1)
+    #         pressure = serial_call_with_retry(self.interface.read_pressure_sensor, idx)
+    #         if pressure is None:
+    #             continue
+    #         self.recent_pressures.append(pressure)
+    #         self._pressure_publisher_dict[key].publish(
+    #             std_msgs.msg.Float32(data=pressure)
+    #         )
+    #         # Publish average pressure (noise removed pressure)
+    #         self._avg_pressure_publisher_dict[key].publish(
+    #             std_msgs.msg.Float32(data=self.average_pressure)
+    #         )
+
+    # def publish_pressure_control(self):
+    #     for idx in list(self.pressure_control_state.keys()):
+    #         idx = int(idx)
+    #         msg = PressureControl()
+    #         msg.board_idx = idx
+    #         msg.start_pressure = self.pressure_control_state[f"{idx}"]["start_pressure"]
+    #         msg.stop_pressure = self.pressure_control_state[f"{idx}"]["stop_pressure"]
+    #         msg.release = self.pressure_control_state[f"{idx}"]["release"]
+    #         self.pressure_control_pub.publish(msg)
+
+    # def pressure_control_loop(self, idx, start_pressure, stop_pressure, release):
+    #     self.pressure_control_state[f"{idx}"]["start_pressure"] = start_pressure
+    #     self.pressure_control_state[f"{idx}"]["stop_pressure"] = stop_pressure
+    #     self.pressure_control_state[f"{idx}"]["release"] = release
+    #     if self.pressure_control_running is False:
+    #         return
+    #     if release is True:
+    #         self.release_vacuum(idx)
+    #         self.pressure_control_running = False
+    #         return
+    #     vacuum_on = False
+    #     while self.pressure_control_running:
+    #         pressure = self.average_pressure
+    #         if pressure is None:
+    #             rospy.sleep()
+    #         if vacuum_on is False and pressure > start_pressure:
+    #             vacuum_on = self.start_vacuum(idx)
+    #         if vacuum_on and pressure <= stop_pressure:
+    #             vacuum_on = not self.stop_vacuum(idx)
+    #         rospy.sleep(0.1)
+
+    # @property
+    # def average_pressure(self):
+    #     n = len(self.recent_pressures)
+    #     if n == 0:
+    #         return None
+    #     return sum(self.recent_pressures) / n
+
+    # def release_vacuum(self, idx):
+    #     """Connect work to air.
+
+    #     After 1s, all valves are closed and pump is stopped.
+    #     """
+    #     if not self.interface.is_opened():
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.open_air_connect_valve,
+    #                                  max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     rospy.sleep(1)  # Wait until air is completely released
+    #     ret = serial_call_with_retry(self.interface.close_air_connect_valve,
+    #                                  max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.close_work_valve,
+    #                                  idx, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     return True
+
+    # def start_vacuum(self, idx):
+    #     """Vacuum air in work"""
+    #     if not self.interface.is_opened():
+    #         return False
+
+    #     ret = serial_call_with_retry(self.interface.start_pump, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     return True
+
+    # def stop_vacuum(self, idx):
+    #     """Seal air in work"""
+    #     if not self.interface.is_opened():
+    #         return False
+
+    #     ret = serial_call_with_retry(self.interface.close_work_valve, idx, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     rospy.sleep(0.3)  # Wait for valve to close completely
+    #     ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
+    #     if ret is None:
+    #         return False
+    #     return True
+
+    # def pressure_control_callback(self, goal):
+    #     if not self.interface.is_opened():
+    #         return
+    #     if hasattr(self, 'pressure_control_thread') and self.pressure_control_thread is not None:
+    #         # Finish existing thread
+    #         self.pressure_control_running = False
+    #         # Wait for the finishing process complete
+    #         while self.pressure_control_thread.is_alive() is True:
+    #             rospy.sleep(0.1)
+    #     # Set new thread
+    #     idx = goal.board_idx
+    #     start_pressure = goal.start_pressure
+    #     stop_pressure = goal.stop_pressure
+    #     release = goal.release
+    #     self.pressure_control_running = True
+    #     self.pressure_control_thread = threading.Thread(
+    #         target=self.pressure_control_loop,
+    #         args=(
+    #             idx,
+    #             start_pressure,
+    #             stop_pressure,
+    #             release,
+    #         ),
+    #         daemon=True,
+    #     )
+    #     self.pressure_control_thread.start()
+    #     return self.pressure_control_server.set_succeeded(PressureControlResult())
+
+    def start_add_air(self, ids):
+        if not isinstance(ids, list):
+            ids = [ids]
+        for i in self.air_board_ids:
+            if i not in ids:
+                self.interface.close_work_valve(i)
+            self.interface.open_relay_valve(i)
+        for i in ids:
+            self.interface.open_work_valve(i)
+        self.interface.start_pump()
+
+    def stop_add_air(self, ids):
+        if not isinstance(ids, list):
+            ids = [ids]
+        for i in ids:
+            self.interface.close_work_valve(i)
+        for i in self.air_board_ids:
+            self.interface.close_relay_valve(i)
+        self.interface.stop_pump()
+
+    def start_remove_air(self, ids):
+        if not isinstance(ids, list):
+            ids = [ids]
+        for i in self.air_board_ids:
+            if i not in ids:
+                self.interface.close_work_valve(i)
+            self.interface.open_relay_valve(i)
+        for i in ids:
+            self.interface.open_work_valve(i)
+        self.interface.open_air_connect_valve()
+
+    def stop_remove_air(self, ids):
+        if not isinstance(ids, list):
+            ids = [ids]
+        for i in ids:
+            self.interface.close_work_valve(i)
+        self.interface.close_air_connect_valve()
+        for i in self.air_board_ids:
+            self.interface.close_relay_valve(i)
+
+    def refill(self, idx, threshold):
+        rospy.loginfo(f"[refill] {idx}")
+        start_time = rospy.Time.now()
+        self.start_add_air(idx)
+        while True:
+            pressure = self.read_pressure_sensor(idx)
+            scaled_pressure = self.scaled_pressure(idx)
+            rospy.loginfo(f"[refill] {pressure}")
+            if scaled_pressure >= threshold or (rospy.Time.now() - start_time) >= rospy.Duration(4):
+                break
+        self.stop_add_air(idx)
+
     def publish_pressure(self):
-        if not self.interface.is_opened():
-            return
         for idx in self.air_board_ids:
-            key = f"{idx}"
-            if key not in self._pressure_publisher_dict:
-                self._pressure_publisher_dict[key] = rospy.Publisher(
-                    self.base_namespace + "/fullbody_controller/pressure/" + key,
-                    std_msgs.msg.Float32,
-                    queue_size=1,
-                )
-                self._avg_pressure_publisher_dict[key] = rospy.Publisher(
-                    self.base_namespace + "/fullbody_controller/average_pressure/" + key,
-                    std_msgs.msg.Float32,
-                    queue_size=1,
-                )
-                # Avoid 'rospy.exceptions.ROSException:
-                # publish() to a closed topic'
-                rospy.sleep(0.1)
-            pressure = serial_call_with_retry(self.interface.read_pressure_sensor, idx)
-            if pressure is None:
-                continue
-            self.recent_pressures.append(pressure)
-            self._pressure_publisher_dict[key].publish(
-                std_msgs.msg.Float32(data=pressure)
-            )
-            # Publish average pressure (noise removed pressure)
-            self._avg_pressure_publisher_dict[key].publish(
-                std_msgs.msg.Float32(data=self.average_pressure)
-            )
+            try:
+                key = f'{idx}'
+                if key not in self._scaled_pressure_publisher_dict:
+                    self._scaled_pressure_publisher_dict[key] = rospy.Publisher(
+                        '/scaled_pressure/'+key, std_msgs.msg.Float32,
+                        queue_size=1)
+                    # Avoid 'rospy.exceptions.ROSException:
+                    # publish() to a closed topic'
+                    rospy.sleep(0.1)
+                pressure = self.read_pressure_sensor(idx)
+                scaled_pressure = self.scaled_pressure(idx)
+                if scaled_pressure is not None:
+                    self._scaled_pressure_publisher_dict[key].publish(
+                        std_msgs.msg.Float32(data=scaled_pressure))
+                    print(f'control pressure:{self.control_positive_pressure}')
+                    if self.control_positive_pressure:
+                        if scaled_pressure > -8 and scaled_pressure < self.refill_lower_threshold:
+                            self.refill(idx, self.refill_upper_threshold)
+            except serial.serialutil.SerialException as e:
+                rospy.logerr('[publish_pressure] {}'.format(str(e)))
 
-    def publish_pressure_control(self):
-        for idx in list(self.pressure_control_state.keys()):
-            idx = int(idx)
-            msg = PressureControl()
-            msg.board_idx = idx
-            msg.start_pressure = self.pressure_control_state[f"{idx}"]["start_pressure"]
-            msg.stop_pressure = self.pressure_control_state[f"{idx}"]["stop_pressure"]
-            msg.release = self.pressure_control_state[f"{idx}"]["release"]
-            self.pressure_control_pub.publish(msg)
+    def read_pressure_sensor(self, idx, force=False):
+        if idx not in self.recent_pressures:
+            # Initialize a deque for each new sensor index (id)
+            self.recent_pressures[idx] = deque([], maxlen=5)
 
-    def pressure_control_loop(self, idx, start_pressure, stop_pressure, release):
-        self.pressure_control_state[f"{idx}"]["start_pressure"] = start_pressure
-        self.pressure_control_state[f"{idx}"]["stop_pressure"] = stop_pressure
-        self.pressure_control_state[f"{idx}"]["release"] = release
-        if self.pressure_control_running is False:
-            return
-        if release is True:
-            self.release_vacuum(idx)
-            self.pressure_control_running = False
-            return
-        vacuum_on = False
-        while self.pressure_control_running:
-            pressure = self.average_pressure
-            if pressure is None:
-                rospy.sleep()
-            if vacuum_on is False and pressure > start_pressure:
-                vacuum_on = self.start_vacuum(idx)
-            if vacuum_on and pressure <= stop_pressure:
-                vacuum_on = not self.stop_vacuum(idx)
-            rospy.sleep(0.1)
+        while True:
+            try:
+                pressure = self.interface.read_pressure_sensor(idx)
+                self.recent_pressures[idx].append(pressure)
+                return pressure
+            except serial.serialutil.SerialException as e:
+                rospy.logerr('[read_pressure_sensor] {}'.format(str(e)))
+                if force is True:
+                    continue
 
-    @property
-    def average_pressure(self):
-        n = len(self.recent_pressures)
-        if n == 0:
+    def average_pressure(self, idx):
+        if idx in self.recent_pressures and len(self.recent_pressures[idx]) > 0:
+            # Calculate the average for the specific sensor id
+            return sum(self.recent_pressures[idx]) / len(self.recent_pressures[idx])
+        else:
+            rospy.logwarn('[average_pressure] No data available for id {}'.format(idx))
             return None
-        return sum(self.recent_pressures) / n
 
-    def release_vacuum(self, idx):
-        """Connect work to air.
+    def scaled_pressure(self, idx):
+        return self.average_pressure(idx) - self.max_pressures[idx]
+        # # Get the current pressure and scale it using min and max pressures
+        # current_pressure = self.average_pressure(idx)
 
-        After 1s, all valves are closed and pump is stopped.
-        """
-        if not self.interface.is_opened():
-            return False
-        ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.open_air_connect_valve,
-                                     max_retries=3)
-        if ret is None:
-            return False
-        rospy.sleep(1)  # Wait until air is completely released
-        ret = serial_call_with_retry(self.interface.close_air_connect_valve,
-                                     max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.close_work_valve,
-                                     idx, max_retries=3)
-        if ret is None:
-            return False
-        return True
+        # if idx in self.min_pressures and idx in self.max_pressures:
+        #     min_pressure = self.min_pressures[idx]
+        #     max_pressure = self.max_pressures[idx]
 
-    def start_vacuum(self, idx):
-        """Vacuum air in work"""
-        if not self.interface.is_opened():
-            return False
+        #     if max_pressure > min_pressure:  # Avoid division by zero
+        #         scaled_pressure = (current_pressure - min_pressure) / (max_pressure - min_pressure)
+        #         return scaled_pressure
+        #     else:
+        #         rospy.logwarn(f"[get_scaled_pressure] Invalid calibration range for sensor {idx}")
+        #         return None
+        # else:
+        #     # rospy.logwarn(f"[get_scaled_pressure] Calibration data not found for sensor {idx}")
+        #     return None
 
-        ret = serial_call_with_retry(self.interface.start_pump, max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
-        if ret is None:
-            return False
-        return True
+    def calibrate_sensor(self, idx):
+        rospy.loginfo(f"[calibrate_sensor] id:{idx}")
+        # # Step 1: Remove air to reach atmospheric pressure
+        # self.start_remove_air(idx)
+        # input("Press Enter to stop removing air...")
+        # self.stop_remove_air(idx)
 
-    def stop_vacuum(self, idx):
-        """Seal air in work"""
-        if not self.interface.is_opened():
-            return False
+        # # Save the minimum pressure reading as atmospheric pressure
+        # for i in range(10):
+        #     self.read_pressure_sensor(idx)
+        # min_pressure = self.average_pressure(idx)
+        # if min_pressure > 40:
+        #     rospy.logwarn(f"Invalid calibration range for sensor {idx}")
+        #     return
+        # self.min_pressures[idx] = min_pressure
+        # rospy.loginfo(f"[calibrate_sensor] Sensor {idx} min pressure (atmospheric): {min_pressure}")
 
-        ret = serial_call_with_retry(self.interface.close_work_valve, idx, max_retries=3)
-        if ret is None:
-            return False
-        ret = serial_call_with_retry(self.interface.close_air_connect_valve, max_retries=3)
-        if ret is None:
-            return False
-        rospy.sleep(0.3)  # Wait for valve to close completely
-        ret = serial_call_with_retry(self.interface.stop_pump, max_retries=3)
-        if ret is None:
-            return False
-        return True
+        # Step 2: Add air for 8 seconds to reach maximum pressure
+        self.start_add_air(idx)
+        input("Press Enter to stop adding air...")
+        self.stop_add_air(idx)
 
-    def pressure_control_callback(self, goal):
-        if not self.interface.is_opened():
-            return
-        if hasattr(self, 'pressure_control_thread') and self.pressure_control_thread is not None:
-            # Finish existing thread
-            self.pressure_control_running = False
-            # Wait for the finishing process complete
-            while self.pressure_control_thread.is_alive() is True:
-                rospy.sleep(0.1)
-        # Set new thread
-        idx = goal.board_idx
-        start_pressure = goal.start_pressure
-        stop_pressure = goal.stop_pressure
-        release = goal.release
-        self.pressure_control_running = True
-        self.pressure_control_thread = threading.Thread(
-            target=self.pressure_control_loop,
-            args=(
-                idx,
-                start_pressure,
-                stop_pressure,
-                release,
-            ),
-            daemon=True,
-        )
-        self.pressure_control_thread.start()
-        return self.pressure_control_server.set_succeeded(PressureControlResult())
+        # Save the maximum pressure reading
+        for i in range(10):
+            self.read_pressure_sensor(idx)
+        max_pressure = self.average_pressure(idx)
+        # if max_pressure <= min_pressure:
+        #     rospy.logwarn(f"Invalid calibration range for sensor {idx}")
+        #     return
+        self.max_pressures[idx] = max_pressure
+        rospy.loginfo(f"[calibrate_sensor] Sensor {idx} max pressure: {max_pressure}")
+
 
     def publish_imu_message(self):
         if self.publish_imu is False or self.imu_publisher.get_num_connections() == 0:
@@ -1092,9 +1254,10 @@ class RCB4ROSBridge:
             self.publish_imu_message()
             self.publish_sensor_values()
             self.publish_battery_voltage_value()
-            if rospy.get_param("~use_rcb4") is False and self.control_pressure:
-                self.publish_pressure()
-                self.publish_pressure_control()
+            self.publish_pressure()
+            # if rospy.get_param("~use_rcb4") is False and self.control_pressure:
+            #     self.publish_pressure()
+            #     self.publish_pressure_control()
             rate.sleep()
 
 
