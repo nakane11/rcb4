@@ -833,6 +833,7 @@ class RCB4ROSBridge:
             self.pressure_control_running[idx] = False
             return
         air_work_on = False
+        vent_on = False
         while self.pressure_control_running[idx]:
             pressure = self.average_pressure(idx)
             if pressure is None:
@@ -840,10 +841,22 @@ class RCB4ROSBridge:
                 continue
             is_depressurizing = trigger_pressure > target_pressure
             is_pressurizing = trigger_pressure < target_pressure
+            vent_enabled = release_duration < 0
             depressure_check_start = is_depressurizing and (pressure > trigger_pressure)
             depressure_check_stop = is_depressurizing and (pressure <= target_pressure)
             pressure_check_start = is_pressurizing and (pressure < trigger_pressure)
             pressure_check_stop = is_pressurizing and (pressure >= target_pressure)
+            depressure_check_vent_start = is_depressurizing and vent_enabled and (pressure < target_pressure)
+            depressure_check_vent_stop = is_depressurizing and (not vent_enabled or (pressure > target_pressure))
+            pressure_check_vent_start = is_pressurizing and vent_enabled and (pressure > target_pressure)
+            pressure_check_vent_stop =  is_pressurizing and (not vent_enabled or (pressure < target_pressure))
+            rospy.loginfo(f"depressure_check_start: {depressure_check_start}")
+            rospy.loginfo(f"depressure_check_stop: {depressure_check_stop}")
+            rospy.loginfo(f"depressure_check_vent_start: {depressure_check_vent_start}")
+            rospy.loginfo(f"depressure_check_vent_stop: {depressure_check_vent_stop}")
+            if vent_on and (depressure_check_vent_stop or pressure_check_vent_stop):
+                rospy.loginfo(f"[Stop release air work] id: {idx}")
+                vent_on = not self.stop_release_work(idx)
             if air_work_on is False and (depressure_check_start or pressure_check_start):
                 self.air_disconnect_lock.acquire(idx)
                 self.pump_on_lock.acquire(idx)
@@ -854,6 +867,9 @@ class RCB4ROSBridge:
                 self.pump_on_lock.release(idx)
                 rospy.loginfo(f"[Stop air work] id: {idx}")
                 air_work_on = not self.stop_air_work(idx)
+            if vent_on is False and (depressure_check_vent_start or pressure_check_vent_start):
+                rospy.loginfo(f"[Start release air work] id: {idx}")
+                vent_on = self.start_release_work(idx)
             rospy.sleep(0.1)
 
     def average_pressure(self, idx):
