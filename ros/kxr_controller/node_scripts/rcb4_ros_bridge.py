@@ -825,8 +825,11 @@ class RCB4ROSBridge:
         if release_duration > 0:
             self.air_disconnect_lock.release(idx)
             self.pump_on_lock.release(idx)
-            rospy.loginfo(f"[Release air work] id: {idx}")
-            self.release_air_work(idx, release_duration)
+            rospy.loginfo(f"[Start release air work] id: {idx}")
+            self.start_release_work(idx)
+            rospy.sleep(release_duration)  # Wait until air is completely released
+            rospy.loginfo(f"[Stop release air work] id: {idx}")
+            self.stop_release_work(idx)
             self.pressure_control_running[idx] = False
             return
         air_work_on = False
@@ -916,25 +919,31 @@ class RCB4ROSBridge:
         self.air_connect_lock.wait_for_all_released()
         return self.interface.close_air_connect_valve()
 
-    def release_air_work(self, idx, release_duration):
-        """Connect work to air.
-
-        After release_duration[s], all valves are closed and pump is stopped.
-        """
+    def start_release_work(self, idx):
+        """Connect work to air"""
         if not self.interface.is_opened():
             return False
+
         ret = serial_call_with_retry(self.stop_pump, max_retries=3)
         if ret is None:
             return False
         ret = serial_call_with_retry(self.interface.open_work_valve, idx, max_retries=3)
         if ret is None:
             return False
+        self.pump_off_lock.acquire(idx)
         self.air_connect_lock.acquire(idx)
         ret = serial_call_with_retry(self.open_air_connect_valve,
                                      max_retries=3)
         if ret is None:
             return False
-        rospy.sleep(release_duration)  # Wait until air is completely released
+        return True
+
+    def stop_release_work(self, idx):
+        """Disconnect work from air"""
+        if not self.interface.is_opened():
+            return False
+
+        self.pump_off_lock.release(idx)
         self.air_connect_lock.release(idx)
         ret = serial_call_with_retry(self.close_air_connect_valve,
                                      max_retries=3)
