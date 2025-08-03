@@ -1,7 +1,6 @@
 (require "package://kxreus/euslisp/kxr-interface.l")
 
 (kxr-init :create-viewer nil)
-;; (send *ri* :servo-on)
 
 (setq walk-angle
       (list #f(20.2163 29.0588 36.2475 13.23 11.5425 73.6425 138.004 2.09251 28.755 7.83001 27.6413 1.24876 -7 94.474 81.8825 1.62001 9.24751 25.1438 45.765)
@@ -44,3 +43,13 @@
     (send *ri* :angle-vector-sequence angle-list (make-list (length angle-list) :initial-element 200))
     (send *ri* :wait-interpolation)
     ))
+
+(setq index-joints (list "INDEX0" "INDEX1" "INDEX2" "INDEX3"))
+(setq middle-joints (list "MIDDLE0" "MIDDLE1" "MIDDLE2" "MIDDLE3"))
+(setq ring-joints (list "RING0" "RING1" "RING2" "RING3"))
+(setq little-joints (list "LITTLE0" "LITTLE1" "LITTLE2" "LITTLE3"))
+(setq thumb-joints (list "THUMB0" "THUMB1" "THUMB2"))
+(defun servo-off (name)
+  (send *ri* :servo-off :names (flatten name)))
+
+;; #f(90.9225 -60.885 39.15 27.945 34.2225 -18.2587 -60.4125 10.125 -16.6387 -39.3525 -47.3175 6.17626 1.72126 -40.1962 -47.5875 -0.26999 17.2463 4.25251 -49.0725)
