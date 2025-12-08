@@ -6,5 +6,7 @@ numpy>=1.22.0
 pandas
 pyelftools
 pyserial
+pyyaml
 readchar
+setuptools;python_version>="3.12"
 tabulate
